@@ -81,7 +81,7 @@ class SocketCAN : public rclcpp::Node
             message.is_remote_request = frame.can_id & 0x40000000;  //Bit 30
             message.is_extended_id = frame.can_id & 0x80000000;     //Bit 31
             message.dlc = frame.can_dlc;
-            memcpy(frame.data, &message.data, sizeof(frame.data));
+            std::copy(std::begin(frame.data), std::end(frame.data), std::begin(message.data));
 
             publisher->publish(message);
         }
