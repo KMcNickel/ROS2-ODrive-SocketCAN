@@ -16,4 +16,14 @@ if(BUILD_TESTING)
   ament_lint_auto_find_test_dependencies()
 endif()
 
+add_executable(odrive src/odrive.cpp)
+ament_target_dependencies(odrive rclcpp can_interface odrive_interface)
+
+install(TARGETS
+  odrive
+  DESTINATION lib/${PROJECT_NAME})
+
+install(DIRECTORY launch
+DESTINATION share/${PROJECT_NAME})
+
 ament_package()
