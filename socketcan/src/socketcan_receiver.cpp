@@ -1,3 +1,4 @@
+#include <poll.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,21 +11,25 @@
 
 #include <linux/can.h>
 #include <linux/can/raw.h>
-#include <boost/asio.hpp>
-#include <boost/bind.hpp>
 
 #include "rclcpp/rclcpp.hpp"
 #include "can_interface/msg/can_frame.hpp"
 
-class SocketCAN : public rclcpp::Node
+class SocketCAN_Sender : public rclcpp::Node
 {
     public:
-        SocketCAN(std::string interfaceName)
-        : Node("SocketCAN")
+        SocketCAN_Sender()
+        : Node("receiver")
         {
             sysOK = true;
-
             int err;
+            std::string interfaceName;
+
+            this->declare_parameter<std::string>("interface_name", "can0");
+
+            this->get_parameter("interface_name", interfaceName);
+
+            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Attempting to connect on: %s", interfaceName.c_str());
 
             if ((socketID = socket(PF_CAN, SOCK_RAW, CAN_RAW)) < 0)
             {
@@ -58,35 +63,16 @@ class SocketCAN : public rclcpp::Node
 
             RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Bind to socket successful");
 
-            publisher = this->create_publisher<can_interface::msg::CanFrame>("canRx", 50);
+            publisher = this->create_publisher<can_interface::msg::CanFrame>("socketcan/receiver/data", 50);
+
+            pollDesc.fd = socketID;
+            pollDesc.events = POLLIN;
 
             while(rclcpp::ok())
                 receiveData();
         }
 
-        void receiveData()
-        {
-            struct can_frame frame;
-            int err;
-            auto message = can_interface::msg::CanFrame();
-
-            if((err = read(socketID, &frame, sizeof(struct can_frame))) < 0)
-            {
-                RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Socket Error: Unable to read data: %d", err);
-                return;
-            }
-
-            message.can_id = frame.can_id & 0x1FFFFFFF;             //Get just the 11 or 29 bit ID
-            message.is_error = frame.can_id & 0x20000000;           //Bit 29
-            message.is_remote_request = frame.can_id & 0x40000000;  //Bit 30
-            message.is_extended_id = frame.can_id & 0x80000000;     //Bit 31
-            message.dlc = frame.can_dlc;
-            std::copy(std::begin(frame.data), std::end(frame.data), std::begin(message.data));
-
-            publisher->publish(message);
-        }
-
-        ~SocketCAN()
+        ~SocketCAN_Sender()
         {
             int err;
 
@@ -99,19 +85,55 @@ class SocketCAN : public rclcpp::Node
             
             RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Shut down complete. Goodbye!");
         }
-    
+
     private:
+        void receiveData()
+        {
+            struct can_frame frame;
+            int err;
+            auto message = can_interface::msg::CanFrame();
+            int event;
+
+            event = poll(&pollDesc, 1, 100);
+
+            if(event < 0 && rclcpp::ok())
+            {
+                RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Socket Error: Unable to poll socket: %d", event);
+                return;
+            }
+            if(event > 0)
+            {
+                if((err = read(socketID, &frame, sizeof(struct can_frame))) < 0)
+                {
+                    RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Socket Error: Unable to read data: %d", err);
+                    return;
+                }
+
+                RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Received %d bytes on ID: %d", frame.can_dlc, frame.can_id);
+
+                message.can_id = frame.can_id & 0x1FFFFFFF;             //Get just the 11 or 29 bit ID
+                message.is_error = frame.can_id & 0x20000000;           //Bit 29
+                message.is_remote_request = frame.can_id & 0x40000000;  //Bit 30
+                message.is_extended_id = frame.can_id & 0x80000000;     //Bit 31
+                message.dlc = frame.can_dlc;
+                std::copy(std::begin(frame.data), std::end(frame.data), std::begin(message.data));
+
+                publisher->publish(message);
+            }
+        }
+    
         bool sysOK;
         int socketID;
         struct ifreq ifr;
         struct sockaddr_can addr;
         rclcpp::Publisher<can_interface::msg::CanFrame>::SharedPtr publisher;
+        struct pollfd pollDesc;
 };
 
 int main(int argc, char * argv[])
 {
     rclcpp::init(argc, argv);
-    rclcpp::spin(std::make_shared<SocketCAN>("can0"));
+    rclcpp::spin(std::make_shared<SocketCAN_Sender>());
     rclcpp::shutdown();
     return 0;
 }

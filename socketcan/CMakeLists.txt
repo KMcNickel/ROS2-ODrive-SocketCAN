@@ -15,11 +15,18 @@ if(BUILD_TESTING)
   ament_lint_auto_find_test_dependencies()
 endif()
 
-add_executable(socketcan src/socketcan.cpp)
-ament_target_dependencies(socketcan rclcpp can_interface)
+add_executable(receiver src/socketcan_receiver.cpp)
+ament_target_dependencies(receiver rclcpp can_interface)
+
+add_executable(sender src/socketcan_sender.cpp)
+ament_target_dependencies(sender rclcpp can_interface)
 
 install(TARGETS
-  socketcan
+  receiver
+  sender
   DESTINATION lib/${PROJECT_NAME})
+
+install(DIRECTORY launch
+DESTINATION share/${PROJECT_NAME})
 
 ament_package()
