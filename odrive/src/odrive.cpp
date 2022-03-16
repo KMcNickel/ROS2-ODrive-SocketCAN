@@ -9,6 +9,8 @@
 #include "can_interface/msg/can_frame.hpp"
 #include "odrive_interface/msg/heartbeat.hpp"
 #include "odrive_interface/msg/encoder_estimates.hpp"
+#include "odrive_interface/msg/input_position.hpp"
+#include "odrive_interface/msg/axis_state.hpp"
 
 using std::placeholders::_1;
 
@@ -29,30 +31,6 @@ class ODrive : public rclcpp::Node
             createSubscribers();
 
             createPublishers();
-        }
-
-        void canDataReceived(const can_interface::msg::CanFrame & message) const
-        {
-            int32_t cmd_id;
-
-            if(message.can_id >> 5 != (uint32_t) axisNumber)
-                return;
-
-            cmd_id = message.can_id & 0b00011111;
-
-            RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Processing message of command: %d", cmd_id);
-
-            switch((odrive_commands) cmd_id)
-            {
-                case ODRIVE_COMMAND_Heartbeat:
-                    UpdateHeartbeat(message.data);
-                    break;
-                case ODRIVE_COMMAND_GetEncoderEstimates:
-                    UpdateEncoderEstimates(message.data);
-                    break;
-                default:
-                    break;
-            }
         }
 
         enum odrive_commands
@@ -131,6 +109,58 @@ class ODrive : public rclcpp::Node
         {
             canDataSubscription = this->create_subscription<can_interface::msg::CanFrame>(
                 "odrivecan/receiver/data", 50, std::bind(&ODrive::canDataReceived, this, _1));
+            inputPositionSubscription = this->create_subscription<odrive_interface::msg::InputPosition>(
+                "odrive/set/position", 10, std::bind(&ODrive::setInputPosition, this, _1));
+            axisStateSubscription = this->create_subscription<odrive_interface::msg::AxisState>(
+                "odrive/set/state", 10, std::bind(&ODrive::setAxisState, this, _1));
+        }
+
+        void setInputPosition(const odrive_interface::msg::InputPosition position) const
+        {
+            auto message = can_interface::msg::CanFrame();
+
+            message.can_id = (axisNumber << 5) | ODRIVE_COMMAND_SetInputPosition;
+            message.is_error = message.is_extended_id = message.is_remote_request = 0;
+            message.dlc = 8;
+            memcpy(message.data.data(), &position, sizeof(position));
+
+            canDataPublisher->publish(message);
+        }
+
+        void setAxisState(const odrive_interface::msg::AxisState state) const
+        {
+            auto message = can_interface::msg::CanFrame();
+
+            message.can_id = (axisNumber << 5) | ODRIVE_COMMAND_SetAxisRequestedState;
+            message.is_error = message.is_extended_id = message.is_remote_request = 0;
+            message.dlc = 8;
+            memcpy(message.data.data(), &state, sizeof(state));
+
+            canDataPublisher->publish(message);
+        }
+
+        void canDataReceived(const can_interface::msg::CanFrame & message) const
+        {
+            int32_t cmd_id;
+
+            if(message.can_id >> 5 != (uint32_t) axisNumber)
+                return;
+
+            cmd_id = message.can_id & 0b00011111;
+
+            RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Processing message of command: %d", cmd_id);
+
+            switch((odrive_commands) cmd_id)
+            {
+                case ODRIVE_COMMAND_Heartbeat:
+                    UpdateHeartbeat(message.data);
+                    break;
+                case ODRIVE_COMMAND_GetEncoderEstimates:
+                    UpdateEncoderEstimates(message.data);
+                    break;
+                default:
+                    break;
+            }
         }
 
         void UpdateHeartbeat(std::array<uint8_t, 8UL> canData) const
@@ -164,6 +194,9 @@ class ODrive : public rclcpp::Node
         }
 
         rclcpp::Subscription<can_interface::msg::CanFrame>::SharedPtr canDataSubscription;
+        rclcpp::Subscription<odrive_interface::msg::InputPosition>::SharedPtr inputPositionSubscription;
+        rclcpp::Subscription<odrive_interface::msg::AxisState>::SharedPtr axisStateSubscription;
+
         rclcpp::Publisher<can_interface::msg::CanFrame>::SharedPtr canDataPublisher;
         rclcpp::Publisher<odrive_interface::msg::Heartbeat>::SharedPtr heartbeatPublisher;
         rclcpp::Publisher<odrive_interface::msg::EncoderEstimates>::SharedPtr encoderEstimatePublisher;
