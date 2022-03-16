@@ -90,7 +90,7 @@ class SocketCAN_Sender : public rclcpp::Node
             int err;
 
             if((message.is_extended_id && (message.can_id & 0xE0000000))
-                || (!message.is_extended_id && (message.can_id & 0xFFFFF888)))
+                || (!message.is_extended_id && (message.can_id & 0xFFFFF800)))
                 {
                     RCLCPP_WARN(rclcpp::get_logger("rclcpp"), 
                                 "Message was sent with an invalid ID. IDE: %d - ID: %X", 
