@@ -8,6 +8,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include "can_interface/msg/can_frame.hpp"
 #include "odrive_interface/msg/heartbeat.hpp"
+#include "odrive_interface/msg/encoder_estimates.hpp"
 
 using std::placeholders::_1;
 
@@ -34,7 +35,7 @@ class ODrive : public rclcpp::Node
         {
             int32_t cmd_id;
 
-            if(message.can_id >> 5 != axisNumber)
+            if(message.can_id >> 5 != (uint32_t) axisNumber)
                 return;
 
             cmd_id = message.can_id & 0b00011111;
@@ -45,6 +46,9 @@ class ODrive : public rclcpp::Node
             {
                 case ODRIVE_COMMAND_Heartbeat:
                     UpdateHeartbeat(message.data);
+                    break;
+                case ODRIVE_COMMAND_GetEncoderEstimates:
+                    UpdateEncoderEstimates(message.data);
                     break;
                 default:
                     break;
@@ -120,6 +124,7 @@ class ODrive : public rclcpp::Node
         {
             canDataPublisher = this->create_publisher<can_interface::msg::CanFrame>("odrivecan/sender/data", 10);
             heartbeatPublisher = this->create_publisher<odrive_interface::msg::Heartbeat>("odrive/status/heartbeat", 10);
+            encoderEstimatePublisher = this->create_publisher<odrive_interface::msg::EncoderEstimates>("odrive/status/encoderEstimates", 10);
         }
 
         void createSubscribers()
@@ -128,7 +133,7 @@ class ODrive : public rclcpp::Node
                 "odrivecan/receiver/data", 50, std::bind(&ODrive::canDataReceived, this, _1));
         }
 
-        void UpdateHeartbeat(std::array<int8_t, 8UL> canData) const
+        void UpdateHeartbeat(std::array<uint8_t, 8UL> canData) const
         {
             auto message = odrive_interface::msg::Heartbeat();
 
@@ -145,12 +150,28 @@ class ODrive : public rclcpp::Node
             heartbeatPublisher->publish(message);
         }
 
+        void UpdateEncoderEstimates(std::array<uint8_t, 8UL> canData) const
+        {
+            auto message = odrive_interface::msg::EncoderEstimates();
+
+            memcpy(&currentPosition, canData.data(), sizeof(message.position_estimate));
+            memcpy(&currentVelocity, canData.data() + 4, sizeof(message.velocity_estimate));
+
+            message.position_estimate = currentPosition;
+            message.velocity_estimate = currentVelocity;
+
+            encoderEstimatePublisher->publish(message);
+        }
+
         rclcpp::Subscription<can_interface::msg::CanFrame>::SharedPtr canDataSubscription;
         rclcpp::Publisher<can_interface::msg::CanFrame>::SharedPtr canDataPublisher;
         rclcpp::Publisher<odrive_interface::msg::Heartbeat>::SharedPtr heartbeatPublisher;
+        rclcpp::Publisher<odrive_interface::msg::EncoderEstimates>::SharedPtr encoderEstimatePublisher;
 
         int32_t axisNumber;
         mutable odrive_axis_states currentAxisState;
+        mutable float currentPosition;
+        mutable float currentVelocity;
 };
 
 int main(int argc, char * argv[])
