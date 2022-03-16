@@ -89,6 +89,15 @@ class SocketCAN_Sender : public rclcpp::Node
             struct can_frame frame;
             int err;
 
+            if((message.is_extended_id && (message.can_id & 0xE0000000))
+                || (!message.is_extended_id && (message.can_id & 0xFFFFF888)))
+                {
+                    RCLCPP_WARN(rclcpp::get_logger("rclcpp"), 
+                                "Message was sent with an invalid ID. IDE: %d - ID: %X", 
+                                message.is_extended_id, message.can_id);
+                    return;
+                }
+
             frame.can_id = message.is_extended_id;
             frame.can_id = (frame.can_id << 1) | message.is_remote_request;
             frame.can_id = (frame.can_id << 1) | message.is_error;
