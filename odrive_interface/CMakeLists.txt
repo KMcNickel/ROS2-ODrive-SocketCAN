@@ -17,6 +17,8 @@ endif()
 rosidl_generate_interfaces(${PROJECT_NAME}
 "msg/Heartbeat.msg"
 "msg/EncoderEstimates.msg"
+"msg/InputPosition.msg"
+"msg/AxisState.msg"
 )
 
 ament_package()
