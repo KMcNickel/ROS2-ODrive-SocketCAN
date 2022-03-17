@@ -1,7 +1,0 @@
-{
-    "python.autoComplete.extraPaths": [
-        "/home/kyle/dev_ws/install/tutorial_interfaces/lib/python3.8/site-packages",
-        "/home/kyle/dev_ws/install/turtlesim/lib/python3.8/site-packages",
-        "/opt/ros/galactic/lib/python3.8/site-packages"
-    ]
-}
