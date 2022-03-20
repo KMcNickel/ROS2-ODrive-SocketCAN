@@ -4,6 +4,8 @@
 #include <string.h>
 #include <unistd.h>
 #include <iostream>
+#include <cerrno>
+#include <cstring>
 
 #include <net/if.h>
 #include <sys/ioctl.h>
@@ -54,17 +56,15 @@ class SocketCAN_Receiver : public rclcpp_lifecycle::LifecycleNode
         rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
         on_activate(const rclcpp_lifecycle::State &)
         {
-            int err;
-
             RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Activating...");
 
             RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Attempting to connect on: %s", interfaceName.c_str());
 
             strcpy(ifr.ifr_name, interfaceName.c_str());
             
-            if((err = ioctl(socketID, SIOCGIFINDEX, &ifr)) < 0)
+            if(ioctl(socketID, SIOCGIFINDEX, &ifr) < 0)
             {
-                RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Socket Error: Unable to find interface: %d", err);
+                RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Socket Error: Unable to find interface: %s", std::strerror(errno));
                 return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::FAILURE;
             }
 
@@ -75,9 +75,9 @@ class SocketCAN_Receiver : public rclcpp_lifecycle::LifecycleNode
             addr.can_family = AF_CAN;
             addr.can_ifindex = ifr.ifr_ifindex;
 
-            if((err = bind(socketID, (struct sockaddr *)&addr, sizeof(addr))) < 0)
+            if(bind(socketID, (struct sockaddr *)&addr, sizeof(addr)) < 0)
             {
-                RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Socket Error: Unable to bind to socket: %d", err);
+                RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Socket Error: Unable to bind to socket: %s", std::strerror(errno));
                 return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::FAILURE;
             }
 
@@ -100,13 +100,11 @@ class SocketCAN_Receiver : public rclcpp_lifecycle::LifecycleNode
         rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
         on_cleanup(const rclcpp_lifecycle::State &)
         {
-            int err;
-
             RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Cleaning Up...");
 
-            if(socketID != SOCKET_CLOSED_PROGRAMATICALLY && (err = close(socketID)) < 0)
+            if(socketID != SOCKET_CLOSED_PROGRAMATICALLY && close(socketID) < 0)
             {
-                RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Socket Error: Unable to close socket: %d", err);
+                RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Socket Error: Unable to close socket: %s", std::strerror(errno));
                 return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::FAILURE;
             }
             socketID = SOCKET_CLOSED_PROGRAMATICALLY;
@@ -125,9 +123,9 @@ class SocketCAN_Receiver : public rclcpp_lifecycle::LifecycleNode
 
             RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Shutting Down...");
 
-            if(socketID != SOCKET_CLOSED_PROGRAMATICALLY && (err = close(socketID)) < 0)
+            if(socketID != SOCKET_CLOSED_PROGRAMATICALLY && close(socketID) < 0)
             {
-                RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Socket Error: Unable to close socket: %d", err);
+                RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Socket Error: Unable to close socket: %s", std::strerror(errno));
                 return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::FAILURE;
             }
             socketID = SOCKET_CLOSED_PROGRAMATICALLY;
@@ -143,22 +141,21 @@ class SocketCAN_Receiver : public rclcpp_lifecycle::LifecycleNode
         void receiveData()
         {
             struct can_frame frame;
-            int err;
             auto message = can_interface::msg::CanFrame();
             int event;
 
             event = poll(&pollDesc, 1, 10);
 
-            if(event < 0 && rclcpp::ok())
+            if(event < 0 && rclcpp::ok() && errno != EINTR) //EINTR = Function interrupted (like if we Ctrl + C)
             {
-                RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Socket Error: Unable to poll socket: %d", event);
+                RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Socket Error: Unable to poll socket: %s", std::strerror(errno));
                 return;
             }
             if(event > 0)
             {
-                if((err = read(socketID, &frame, sizeof(struct can_frame))) < 0)
+                if(read(socketID, &frame, sizeof(struct can_frame)) < 0)
                 {
-                    RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Socket Error: Unable to read data: %d", err);
+                    RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Socket Error: Unable to read data: %s", std::strerror(errno));
                     return;
                 }
 
