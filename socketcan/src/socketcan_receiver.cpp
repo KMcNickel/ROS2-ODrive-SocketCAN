@@ -13,38 +13,59 @@
 #include <linux/can/raw.h>
 
 #include "rclcpp/rclcpp.hpp"
+#include "rclcpp_lifecycle/lifecycle_node.hpp"
+#include "rclcpp_lifecycle/lifecycle_publisher.hpp"
 #include "can_interface/msg/can_frame.hpp"
 
-class SocketCAN_Sender : public rclcpp::Node
+#define SOCKET_CLOSED_PROGRAMATICALLY -10
+
+class SocketCAN_Receiver : public rclcpp_lifecycle::LifecycleNode
 {
     public:
-        SocketCAN_Sender()
-        : Node("receiver")
+        SocketCAN_Receiver()
+        : LifecycleNode("receiver")
+        {}
+
+        rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
+        on_configure(const rclcpp_lifecycle::State &)
         {
-            sysOK = true;
-            int err;
-            std::string interfaceName;
+            RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Configuring...");
 
             this->declare_parameter<std::string>("interface_name", "can0");
-
             this->get_parameter("interface_name", interfaceName);
-
-            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Attempting to connect on: %s", interfaceName.c_str());
 
             if ((socketID = socket(PF_CAN, SOCK_RAW, CAN_RAW)) < 0)
             {
                 RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Socket Error: Unable to create socket: %d", socketID);
-                sysOK = false;
-                return;
+                return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::ERROR;
             }
-            
+
+            pollDesc.fd = socketID;
+            pollDesc.events = POLLIN;
+
+            publisher = this->create_publisher<can_interface::msg::CanFrame>("socketcan/receiver/data", 50);
+
+            timer = this->create_wall_timer(std::chrono::milliseconds(1), std::bind(&SocketCAN_Receiver::receiveData, this));
+
+            RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Configuration completed successfully");
+            return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
+        }
+
+        rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
+        on_activate(const rclcpp_lifecycle::State &)
+        {
+            int err;
+
+            RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Activating...");
+
+            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Attempting to connect on: %s", interfaceName.c_str());
+
             strcpy(ifr.ifr_name, interfaceName.c_str());
             
             if((err = ioctl(socketID, SIOCGIFINDEX, &ifr)) < 0)
             {
                 RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Socket Error: Unable to find interface: %d", err);
-                sysOK = false;
-                return;
+                return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::FAILURE;
             }
 
             if(!(ifr.ifr_flags & IFF_UP))
@@ -57,37 +78,65 @@ class SocketCAN_Sender : public rclcpp::Node
             if((err = bind(socketID, (struct sockaddr *)&addr, sizeof(addr))) < 0)
             {
                 RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Socket Error: Unable to bind to socket: %d", err);
-                sysOK = false;
-                return;
+                return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::FAILURE;
             }
 
-            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Bind to socket successful");
+            publisher->on_activate();
 
-            publisher = this->create_publisher<can_interface::msg::CanFrame>("socketcan/receiver/data", 50);
+            RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Activation completed successfully");
 
-            pollDesc.fd = socketID;
-            pollDesc.events = POLLIN;
-
-            while(1)
-            {
-                if(!rclcpp::ok())
-                    return;
-                receiveData();
-            }
+            return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
         }
 
-        ~SocketCAN_Sender()
+        rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
+        on_deactivate(const rclcpp_lifecycle::State &)
+        {
+            RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Deactivating...");
+            publisher->on_deactivate();
+            RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Deactivation completed successfully");
+            return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
+        }
+
+        rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
+        on_cleanup(const rclcpp_lifecycle::State &)
         {
             int err;
 
-            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Shutting down");
+            RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Cleaning Up...");
 
-            if((err = close(socketID)) < 0)
+            if(socketID != SOCKET_CLOSED_PROGRAMATICALLY && (err = close(socketID)) < 0)
+            {
                 RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Socket Error: Unable to close socket: %d", err);
-            else
-                RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Socket closed");
-            
-            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Shut down complete. Goodbye!");
+                return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::FAILURE;
+            }
+            socketID = SOCKET_CLOSED_PROGRAMATICALLY;
+
+            publisher.reset();
+
+            RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Cleanup completed successfully");
+
+            return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
+        }
+
+        rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
+        on_shutdown(const rclcpp_lifecycle::State &)
+        {
+            int err;
+
+            RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Shutting Down...");
+
+            if(socketID != SOCKET_CLOSED_PROGRAMATICALLY && (err = close(socketID)) < 0)
+            {
+                RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Socket Error: Unable to close socket: %d", err);
+                return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::FAILURE;
+            }
+            socketID = SOCKET_CLOSED_PROGRAMATICALLY;
+
+            publisher.reset();
+
+            RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Shut down completed successfully");
+
+            return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
         }
 
     private:
@@ -98,7 +147,7 @@ class SocketCAN_Sender : public rclcpp::Node
             auto message = can_interface::msg::CanFrame();
             int event;
 
-            event = poll(&pollDesc, 1, 100);
+            event = poll(&pollDesc, 1, 10);
 
             if(event < 0 && rclcpp::ok())
             {
@@ -126,18 +175,26 @@ class SocketCAN_Sender : public rclcpp::Node
             }
         }
     
-        bool sysOK;
         int socketID;
+        std::string interfaceName;
         struct ifreq ifr;
         struct sockaddr_can addr;
-        rclcpp::Publisher<can_interface::msg::CanFrame>::SharedPtr publisher;
+        rclcpp::TimerBase::SharedPtr timer;
+        rclcpp_lifecycle::LifecyclePublisher<can_interface::msg::CanFrame>::SharedPtr publisher;
         struct pollfd pollDesc;
 };
 
 int main(int argc, char * argv[])
 {
     rclcpp::init(argc, argv);
-    rclcpp::spin(std::make_shared<SocketCAN_Sender>());
-    rclcpp::shutdown();
+    rclcpp::executors::SingleThreadedExecutor exe;
+
+    std::shared_ptr<SocketCAN_Receiver> lc_node =
+        std::make_shared<SocketCAN_Receiver>();
+
+    exe.add_node(lc_node->get_node_base_interface());
+
+    exe.spin();
+  rclcpp::shutdown();
     return 0;
 }

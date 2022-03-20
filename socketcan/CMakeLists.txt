@@ -17,7 +17,7 @@ if(BUILD_TESTING)
 endif()
 
 add_executable(receiver src/socketcan_receiver.cpp)
-ament_target_dependencies(receiver rclcpp can_interface)
+ament_target_dependencies(receiver rclcpp_lifecycle can_interface)
 
 add_executable(sender src/socketcan_sender.cpp)
 ament_target_dependencies(sender rclcpp_lifecycle can_interface)
