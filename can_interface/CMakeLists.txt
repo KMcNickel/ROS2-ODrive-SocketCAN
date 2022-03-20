@@ -16,6 +16,7 @@ endif()
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/CanFrame.msg"
+  "srv/CanFrame.srv"
 )
 
 ament_package()

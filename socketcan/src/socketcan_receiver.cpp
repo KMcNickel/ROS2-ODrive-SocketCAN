@@ -68,8 +68,12 @@ class SocketCAN_Sender : public rclcpp::Node
             pollDesc.fd = socketID;
             pollDesc.events = POLLIN;
 
-            while(rclcpp::ok())
+            while(1)
+            {
+                if(!rclcpp::ok())
+                    return;
                 receiveData();
+            }
         }
 
         ~SocketCAN_Sender()
