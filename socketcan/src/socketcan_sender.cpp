@@ -19,6 +19,8 @@
 
 #define MAX_DLC_LENGTH 8
 #define SOCKET_CLOSED_PROGRAMATICALLY -10
+#define CAN_ID_LARGER_THAN_29_BIT_MASK 0xE0000000
+#define CAN_ID_LARGER_THAN_11_BIT_MASK 0xFFFFF800
 
 using std::placeholders::_1;
 using std::placeholders::_2;
@@ -147,8 +149,8 @@ class SocketCAN_Sender : public rclcpp_lifecycle::LifecycleNode
                 err = -1;
             }
 
-            if((request->frame.is_extended_id && (request->frame.can_id & 0xE0000000))
-                || (!request->frame.is_extended_id && (request->frame.can_id & 0xFFFFF800)))
+            if((request->frame.is_extended_id && (request->frame.can_id & CAN_ID_LARGER_THAN_29_BIT_MASK))
+                || (!request->frame.is_extended_id && (request->frame.can_id & CAN_ID_LARGER_THAN_11_BIT_MASK)))
                 {
                     response->status = response->STATUS_ERROR_DLC_OUT_OF_RANGE;
                     RCLCPP_WARN(rclcpp::get_logger("rclcpp"), 

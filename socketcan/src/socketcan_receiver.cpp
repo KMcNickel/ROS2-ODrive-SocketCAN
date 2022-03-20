@@ -20,6 +20,8 @@
 #include "can_interface/msg/can_frame.hpp"
 
 #define SOCKET_CLOSED_PROGRAMATICALLY -10
+#define PUBLISHER_QUEUE_SIZE 50
+#define SOCKET_POLL_TIMEOUT 10
 
 class SocketCAN_Receiver : public rclcpp_lifecycle::LifecycleNode
 {
@@ -47,7 +49,7 @@ class SocketCAN_Receiver : public rclcpp_lifecycle::LifecycleNode
             pollDesc.fd = socketID;
             pollDesc.events = POLLIN;
 
-            publisher = this->create_publisher<can_interface::msg::CanFrame>("socketcan/receiver/data", 50);
+            publisher = this->create_publisher<can_interface::msg::CanFrame>("socketcan/receiver/data", PUBLISHER_QUEUE_SIZE);
 
             timer = this->create_wall_timer(std::chrono::milliseconds(1), std::bind(&SocketCAN_Receiver::receiveData, this));
 
@@ -144,7 +146,7 @@ class SocketCAN_Receiver : public rclcpp_lifecycle::LifecycleNode
             auto message = can_interface::msg::CanFrame();
             int event;
 
-            event = poll(&pollDesc, 1, 10);
+            event = poll(&pollDesc, 1, SOCKET_POLL_TIMEOUT);
 
             if(event < 0 && rclcpp::ok() && errno != EINTR) //EINTR = Function interrupted (like if we Ctrl + C)
             {
