@@ -21,7 +21,7 @@
 
 #define SOCKET_CLOSED_PROGRAMATICALLY -10
 #define PUBLISHER_QUEUE_SIZE 50
-#define SOCKET_POLL_TIMEOUT 10
+#define SOCKET_POLL_TIMEOUT 0       //in milliseconds. 0 returns immediately
 
 class SocketCAN_Receiver : public rclcpp_lifecycle::LifecycleNode
 {
