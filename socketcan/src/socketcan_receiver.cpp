@@ -26,12 +26,14 @@ class SocketCAN_Receiver : public rclcpp_lifecycle::LifecycleNode
     public:
         SocketCAN_Receiver()
         : LifecycleNode("receiver")
-        {}
+        {
+            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Node created");
+        }
 
         rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
         on_configure(const rclcpp_lifecycle::State &)
         {
-            RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Configuring...");
+            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Configuring...");
 
             this->declare_parameter<std::string>("interface_name", "can0");
             this->get_parameter("interface_name", interfaceName);
@@ -49,14 +51,14 @@ class SocketCAN_Receiver : public rclcpp_lifecycle::LifecycleNode
 
             timer = this->create_wall_timer(std::chrono::milliseconds(1), std::bind(&SocketCAN_Receiver::receiveData, this));
 
-            RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Configuration completed successfully");
+            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Configuration completed successfully");
             return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
         }
 
         rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
         on_activate(const rclcpp_lifecycle::State &)
         {
-            RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Activating...");
+            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Activating...");
 
             RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Attempting to connect on: %s", interfaceName.c_str());
 
@@ -83,7 +85,7 @@ class SocketCAN_Receiver : public rclcpp_lifecycle::LifecycleNode
 
             publisher->on_activate();
 
-            RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Activation completed successfully");
+            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Activation completed successfully");
 
             return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
         }
@@ -91,16 +93,16 @@ class SocketCAN_Receiver : public rclcpp_lifecycle::LifecycleNode
         rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
         on_deactivate(const rclcpp_lifecycle::State &)
         {
-            RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Deactivating...");
+            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Deactivating...");
             publisher->on_deactivate();
-            RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Deactivation completed successfully");
+            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Deactivation completed successfully");
             return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
         }
 
         rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
         on_cleanup(const rclcpp_lifecycle::State &)
         {
-            RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Cleaning Up...");
+            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Cleaning Up...");
 
             if(socketID != SOCKET_CLOSED_PROGRAMATICALLY && close(socketID) < 0)
             {
@@ -111,7 +113,7 @@ class SocketCAN_Receiver : public rclcpp_lifecycle::LifecycleNode
 
             publisher.reset();
 
-            RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Cleanup completed successfully");
+            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Cleanup completed successfully");
 
             return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
         }
@@ -119,9 +121,7 @@ class SocketCAN_Receiver : public rclcpp_lifecycle::LifecycleNode
         rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
         on_shutdown(const rclcpp_lifecycle::State &)
         {
-            int err;
-
-            RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Shutting Down...");
+            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Shutting Down...");
 
             if(socketID != SOCKET_CLOSED_PROGRAMATICALLY && close(socketID) < 0)
             {
@@ -132,7 +132,7 @@ class SocketCAN_Receiver : public rclcpp_lifecycle::LifecycleNode
 
             publisher.reset();
 
-            RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Shut down completed successfully");
+            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Shut down completed successfully");
 
             return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
         }
