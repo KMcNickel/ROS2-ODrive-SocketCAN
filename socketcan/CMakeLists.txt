@@ -7,6 +7,7 @@ endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
+find_package(rclcpp_lifecycle REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(can_interface REQUIRED)
 
@@ -19,7 +20,7 @@ add_executable(receiver src/socketcan_receiver.cpp)
 ament_target_dependencies(receiver rclcpp can_interface)
 
 add_executable(sender src/socketcan_sender.cpp)
-ament_target_dependencies(sender rclcpp can_interface)
+ament_target_dependencies(sender rclcpp_lifecycle can_interface)
 
 install(TARGETS
   receiver

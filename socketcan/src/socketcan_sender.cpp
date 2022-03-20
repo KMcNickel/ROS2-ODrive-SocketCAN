@@ -13,43 +13,58 @@
 #include <linux/can/raw.h>
 
 #include "rclcpp/rclcpp.hpp"
+#include "rclcpp_lifecycle/lifecycle_node.hpp"
 #include "can_interface/srv/can_frame.hpp"
 
 #define MAX_DLC_LENGTH 8
+#define SOCKET_CLOSED_PROGRAMATICALLY -10
 
 using std::placeholders::_1;
 using std::placeholders::_2;
 
-class SocketCAN_Sender : public rclcpp::Node
+class SocketCAN_Sender : public rclcpp_lifecycle::LifecycleNode
 {
     public:
         SocketCAN_Sender()
-        : Node("sender")
+        : LifecycleNode("sender")
+        { }
+
+        rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
+        on_configure(const rclcpp_lifecycle::State &)
         {
-            sysOK = true;
-            int err;
-            std::string interfaceName;
+            RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Configuring...");
 
             this->declare_parameter<std::string>("interface_name", "can0");
 
             this->get_parameter("interface_name", interfaceName);
 
-            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Attempting to connect on: %s", interfaceName.c_str());
-
             if ((socketID = socket(PF_CAN, SOCK_RAW, CAN_RAW)) < 0)
             {
-                RCLCPP_FATAL(rclcpp::get_logger("rclcpp"), "Socket Error: Unable to create socket: %d", socketID);
-                sysOK = false;
-                return;
+                RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Socket Error: Unable to create socket: %d", socketID);
+                return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::ERROR;
             }
+
+            service = this->create_service<can_interface::srv::CanFrame>("socketcan/sender", std::bind(&SocketCAN_Sender::serviceCallback, this, _1, _2));
+
+            RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Configuration completed successfully");
+            return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
+        }
+
+        rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
+        on_activate(const rclcpp_lifecycle::State &)
+        {
+            int err;
+
+            RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Activating...");
+
+            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Attempting to connect on: %s", interfaceName.c_str());
             
             strcpy(ifr.ifr_name, interfaceName.c_str());
             
             if((err = ioctl(socketID, SIOCGIFINDEX, &ifr)) < 0)
             {
-                RCLCPP_FATAL(rclcpp::get_logger("rclcpp"), "Socket Error: Unable to find interface: %d", err);
-                sysOK = false;
-                return;
+                RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Socket Error: Unable to find interface: %d", err);
+                return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::FAILURE;
             }
 
             if(!(ifr.ifr_flags & IFF_UP))
@@ -61,30 +76,63 @@ class SocketCAN_Sender : public rclcpp::Node
 
             if((err = bind(socketID, (struct sockaddr *)&addr, sizeof(addr))) < 0)
             {
-                RCLCPP_FATAL(rclcpp::get_logger("rclcpp"), "Socket Error: Unable to bind to socket: %d", err);
-                sysOK = false;
-                return;
+                RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Socket Error: Unable to bind to socket: %d", err);
+                return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::FAILURE;
             }
 
-            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Bind to socket successful");
+            RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Activation completed successfully");
 
-            service = this->create_service<can_interface::srv::CanFrame>("socketcan/sender", std::bind(&SocketCAN_Sender::serviceCallback, this, _1, _2));
-
-            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Service ready");
+            return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
         }
 
-        ~SocketCAN_Sender()
+        rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
+        on_deactivate(const rclcpp_lifecycle::State &)
+        {
+            RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Deactivating...");
+            RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Deactivation completed successfully");
+            return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
+        }
+
+        rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
+        on_cleanup(const rclcpp_lifecycle::State &)
         {
             int err;
 
-            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Shutting down");
+            RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Cleaning Up...");
 
-            if((err = close(socketID)) < 0)
+            if(socketID != SOCKET_CLOSED_PROGRAMATICALLY && (err = close(socketID)) < 0)
+            {
                 RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Socket Error: Unable to close socket: %d", err);
-            else
-                RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Socket closed");
-            
-            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Shut down complete. Goodbye!");
+                return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::FAILURE;
+            }
+            socketID = SOCKET_CLOSED_PROGRAMATICALLY;
+
+            service.reset();
+
+            RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Cleanup completed successfully");
+
+            return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
+        }
+
+        rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
+        on_shutdown(const rclcpp_lifecycle::State &)
+        {
+            int err;
+
+            RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Shutting Down...");
+
+            if(socketID != SOCKET_CLOSED_PROGRAMATICALLY && (err = close(socketID)) < 0)
+            {
+                RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Socket Error: Unable to close socket: %d", err);
+                return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::FAILURE;
+            }
+            socketID = SOCKET_CLOSED_PROGRAMATICALLY;
+
+            service.reset();
+
+            RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Cleanup completed successfully");
+
+            return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
         }
 
         void serviceCallback (const std::shared_ptr<can_interface::srv::CanFrame::Request> request,
@@ -143,7 +191,7 @@ class SocketCAN_Sender : public rclcpp::Node
         }
     
     private:
-        bool sysOK;
+        std::string interfaceName;
         int socketID;
         struct ifreq ifr;
         struct sockaddr_can addr;
@@ -153,7 +201,14 @@ class SocketCAN_Sender : public rclcpp::Node
 int main(int argc, char * argv[])
 {
     rclcpp::init(argc, argv);
-    rclcpp::spin(std::make_shared<SocketCAN_Sender>());
-    rclcpp::shutdown();
+    rclcpp::executors::SingleThreadedExecutor exe;
+
+    std::shared_ptr<SocketCAN_Sender> lc_node =
+        std::make_shared<SocketCAN_Sender>();
+
+    exe.add_node(lc_node->get_node_base_interface());
+
+    exe.spin();
+  rclcpp::shutdown();
     return 0;
 }
