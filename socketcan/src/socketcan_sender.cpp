@@ -130,7 +130,7 @@ class SocketCAN_Sender : public rclcpp_lifecycle::LifecycleNode
 
             service.reset();
 
-            RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Cleanup completed successfully");
+            RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Shut down completed successfully");
 
             return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
         }
