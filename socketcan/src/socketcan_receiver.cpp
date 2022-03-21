@@ -6,6 +6,7 @@
 #include <iostream>
 #include <cerrno>
 #include <cstring>
+#include <thread>
 
 #include <net/if.h>
 #include <sys/ioctl.h>
@@ -49,9 +50,9 @@ class SocketCAN_Receiver : public rclcpp_lifecycle::LifecycleNode
             pollDesc.fd = socketID;
             pollDesc.events = POLLIN;
 
-            publisher = this->create_publisher<can_interface::msg::CanFrame>("socketcan/receiver/data", PUBLISHER_QUEUE_SIZE);
+            receiveThreadExitFutureObj = receiveThreadExitSignal.get_future();
 
-            timer = this->create_wall_timer(std::chrono::milliseconds(1), std::bind(&SocketCAN_Receiver::receiveData, this));
+            publisher = this->create_publisher<can_interface::msg::CanFrame>("socketcan/receiver/data", PUBLISHER_QUEUE_SIZE);
 
             RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Configuration completed successfully");
             return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
@@ -87,6 +88,8 @@ class SocketCAN_Receiver : public rclcpp_lifecycle::LifecycleNode
 
             publisher->on_activate();
 
+            receiveThread = std::thread(receiveData, std::move(receiveThreadExitFutureObj));
+
             RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Activation completed successfully");
 
             return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
@@ -96,7 +99,11 @@ class SocketCAN_Receiver : public rclcpp_lifecycle::LifecycleNode
         on_deactivate(const rclcpp_lifecycle::State &)
         {
             RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Deactivating...");
+
+            receiveThreadExitSignal.set_value();
+            receiveThread.join();
             publisher->on_deactivate();
+
             RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Deactivation completed successfully");
             return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
         }
@@ -155,47 +162,54 @@ class SocketCAN_Receiver : public rclcpp_lifecycle::LifecycleNode
         }
 
     private:
-        void receiveData()
+        void receiveData(std::future<void> futureObj)
         {
             struct can_frame frame;
             auto message = can_interface::msg::CanFrame();
             int event;
 
-            event = poll(&pollDesc, 1, SOCKET_POLL_TIMEOUT);
+            while(futureObj.wait_for(std::chrono::milliseconds(0)) == std::future_status::timeout)
+            {
+                event = poll(&pollDesc, 1, SOCKET_POLL_TIMEOUT);
 
-            if(event < 0 && rclcpp::ok() && errno != EINTR) //EINTR = Function interrupted (like if we Ctrl + C)
-            {
-                RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Socket Error: Unable to poll socket: %s", std::strerror(errno));
-                return;
-            }
-            if(event > 0)
-            {
-                if(read(socketID, &frame, sizeof(struct can_frame)) < 0)
+                if(event < 0 && rclcpp::ok() && errno != EINTR) //EINTR = Function interrupted (like if we Ctrl + C)
                 {
-                    RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Socket Error: Unable to read data: %s", std::strerror(errno));
+                    RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Socket Error: Unable to poll socket: %s", std::strerror(errno));
                     return;
                 }
+                if(event > 0)
+                {
+                    if(read(socketID, &frame, sizeof(struct can_frame)) < 0)
+                    {
+                        RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Socket Error: Unable to read data: %s", std::strerror(errno));
+                        return;
+                    }
 
-                RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Received %d bytes on ID: %d", frame.can_dlc, frame.can_id);
+                    RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Received %d bytes on ID: %d", frame.can_dlc, frame.can_id);
 
-                message.can_id = frame.can_id & 0x1FFFFFFF;             //Get just the 11 or 29 bit ID
-                message.is_error = frame.can_id & 0x20000000;           //Bit 29
-                message.is_remote_request = frame.can_id & 0x40000000;  //Bit 30
-                message.is_extended_id = frame.can_id & 0x80000000;     //Bit 31
-                message.dlc = frame.can_dlc;
-                std::copy(std::begin(frame.data), std::end(frame.data), std::begin(message.data));
+                    message.can_id = frame.can_id & 0x1FFFFFFF;             //Get just the 11 or 29 bit ID
+                    message.is_error = frame.can_id & 0x20000000;           //Bit 29
+                    message.is_remote_request = frame.can_id & 0x40000000;  //Bit 30
+                    message.is_extended_id = frame.can_id & 0x80000000;     //Bit 31
+                    message.dlc = frame.can_dlc;
+                    std::copy(std::begin(frame.data), std::end(frame.data), std::begin(message.data));
 
-                publisher->publish(message);
+                    publisher->publish(message);
+                }
             }
+            
+            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Closing receive thread");
         }
     
         int socketID;
         std::string interfaceName;
         struct ifreq ifr;
         struct sockaddr_can addr;
-        rclcpp::TimerBase::SharedPtr timer;
         rclcpp_lifecycle::LifecyclePublisher<can_interface::msg::CanFrame>::SharedPtr publisher;
         struct pollfd pollDesc;
+        std::thread receiveThread;
+        std::promise<void> receiveThreadExitSignal;
+        std::future<void> receiveThreadExitFutureObj;
 };
 
 int main(int argc, char * argv[])
