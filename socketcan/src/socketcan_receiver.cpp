@@ -88,7 +88,7 @@ class SocketCAN_Receiver : public rclcpp_lifecycle::LifecycleNode
 
             publisher->on_activate();
 
-            receiveThread = std::thread(receiveData, std::move(receiveThreadExitFutureObj));
+            receiveThread = std::thread(&SocketCAN_Receiver::receiveData, this, std::move(receiveThreadExitFutureObj));
 
             RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Activation completed successfully");
 
@@ -197,7 +197,7 @@ class SocketCAN_Receiver : public rclcpp_lifecycle::LifecycleNode
                     publisher->publish(message);
                 }
             }
-            
+
             RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Closing receive thread");
         }
     
