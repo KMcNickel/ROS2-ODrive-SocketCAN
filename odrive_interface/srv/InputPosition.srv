@@ -1,0 +1,12 @@
+float32 input_position
+int16 velocity_feedforward
+int16 torque_feedforward
+---
+int8 status
+
+# OK
+int8 STATUS_OK=0
+# Range Error
+int8 STATUS_ERROR_INPUT_POSITION_OUT_OF_RANGE=1
+# Service Error
+int8 STATUS_ERROR_OTHER_SERVICE_FAILED=2

@@ -7,12 +7,14 @@
 
 #include "rclcpp/rclcpp.hpp"
 #include "can_interface/msg/can_frame.hpp"
+#include "can_interface/srv/can_frame.hpp"
 #include "odrive_interface/msg/heartbeat.hpp"
 #include "odrive_interface/msg/encoder_estimates.hpp"
-#include "odrive_interface/msg/input_position.hpp"
-#include "odrive_interface/msg/axis_state.hpp"
+#include "odrive_interface/srv/input_position.hpp"
+#include "odrive_interface/srv/axis_state.hpp"
 
 using std::placeholders::_1;
+using std::placeholders::_2;
 
 class ODrive : public rclcpp::Node
 {
@@ -28,9 +30,7 @@ class ODrive : public rclcpp::Node
 
             RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Using Axis %d", axisNumber);
 
-            createSubscribers();
-
-            createPublishers();
+            createInterfaces();
         }
 
         enum odrive_commands
@@ -82,61 +82,74 @@ class ODrive : public rclcpp::Node
             ODRIVE_AXIS_STATE_EncoderHallPhaseCalibration = 0x0D
         };
 
-        /*
-        Example send data:
-        auto message = can_interface::msg::CanFrame();
-        ## fill in message struct ##
-        std::copy(std::begin(source), std::end(source), std::begin(message.data));
-        canDataPublisher->publish(message);
-        */
-
         ~ODrive()
         {
             RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Shutting Down");
-            //Do Stuff
+
+            canDataSenderClient.reset();
+            heartbeatPublisher.reset();
+            encoderEstimatePublisher.reset();
+            canDataSubscription.reset();
+            inputPositionService.reset();
+            axisStateService.reset();
+            
             RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Shutdown complete. Goodbye!");
         }
 
     private:
-        void createPublishers()
+        void createInterfaces()
         {
-            canDataPublisher = this->create_publisher<can_interface::msg::CanFrame>("odrivecan/sender/data", 10);
+            canDataSenderClient = this->create_client<can_interface::srv::CanFrame>("odrivecan/sender");
             heartbeatPublisher = this->create_publisher<odrive_interface::msg::Heartbeat>("odrive/status/heartbeat", 10);
             encoderEstimatePublisher = this->create_publisher<odrive_interface::msg::EncoderEstimates>("odrive/status/encoderEstimates", 10);
-        }
-
-        void createSubscribers()
-        {
             canDataSubscription = this->create_subscription<can_interface::msg::CanFrame>(
                 "odrivecan/receiver/data", 50, std::bind(&ODrive::canDataReceived, this, _1));
-            inputPositionSubscription = this->create_subscription<odrive_interface::msg::InputPosition>(
-                "odrive/set/position", 10, std::bind(&ODrive::setInputPosition, this, _1));
-            axisStateSubscription = this->create_subscription<odrive_interface::msg::AxisState>(
-                "odrive/set/state", 10, std::bind(&ODrive::setAxisState, this, _1));
+            inputPositionService = this->create_service<odrive_interface::srv::InputPosition>(
+                "odrive/input/position", std::bind(&ODrive::setInputPosition, this, _1, _2));
+            axisStateService = this->create_service<odrive_interface::srv::AxisState>(
+                "odrive/input/axis_state", std::bind(&ODrive::setAxisState, this, _1, _2));
         }
 
-        void setInputPosition(const odrive_interface::msg::InputPosition position) const
+        void setInputPosition(const std::shared_ptr<odrive_interface::srv::InputPosition::Request> request,
+                            std::shared_ptr<odrive_interface::srv::InputPosition::Response> response)
         {
-            auto message = can_interface::msg::CanFrame();
+            auto canRequest = std::make_shared<can_interface::srv::CanFrame::Request>();
 
-            message.can_id = (axisNumber << 5) | ODRIVE_COMMAND_SetInputPosition;
-            message.is_error = message.is_extended_id = message.is_remote_request = 0;
-            message.dlc = 8;
-            memcpy(message.data.data(), &position, sizeof(position));
+            canRequest->frame.can_id = (axisNumber << 5) | ODRIVE_COMMAND_SetInputPosition;
+            canRequest->frame.is_error = canRequest->frame.is_extended_id = canRequest->frame.is_remote_request = 0;
+            canRequest->frame.dlc = 8;
+            memcpy(canRequest->frame.data.data(), &request->input_position, sizeof(request->input_position));
 
-            canDataPublisher->publish(message);
+            auto result = canDataSenderClient->async_send_request(canRequest);
+
+            if (rclcpp::spin_until_future_complete(this->get_node_base_interface(), result) == rclcpp::FutureReturnCode::SUCCESS)
+            { 
+                response->status = response->STATUS_OK;
+            } else {
+                response->status = response->STATUS_ERROR_OTHER_SERVICE_FAILED;
+                RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Set input position failed because of an error from CAN service");
+            }
         }
 
-        void setAxisState(const odrive_interface::msg::AxisState state) const
+        void setAxisState(const std::shared_ptr<odrive_interface::srv::AxisState::Request> request,
+                        std::shared_ptr<odrive_interface::srv::AxisState::Response> response)
         {
-            auto message = can_interface::msg::CanFrame();
+            auto canRequest = std::make_shared<can_interface::srv::CanFrame::Request>();
 
-            message.can_id = (axisNumber << 5) | ODRIVE_COMMAND_SetAxisRequestedState;
-            message.is_error = message.is_extended_id = message.is_remote_request = 0;
-            message.dlc = 8;
-            memcpy(message.data.data(), &state, sizeof(state));
+            canRequest->frame.can_id = (axisNumber << 5) | ODRIVE_COMMAND_SetAxisRequestedState;
+            canRequest->frame.is_error = canRequest->frame.is_extended_id = canRequest->frame.is_remote_request = 0;
+            canRequest->frame.dlc = 8;
+            memcpy(canRequest->frame.data.data(), &request->state, sizeof(request->state));
 
-            canDataPublisher->publish(message);
+            auto result = canDataSenderClient->async_send_request(canRequest);
+
+            if (rclcpp::spin_until_future_complete(this->get_node_base_interface(), result) == rclcpp::FutureReturnCode::SUCCESS)
+            { 
+                response->status = response->STATUS_OK;
+            } else {
+                response->status = response->STATUS_ERROR_OTHER_SERVICE_FAILED;
+                RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Set axis state failed because of an error from CAN service");
+            }
         }
 
         void canDataReceived(const can_interface::msg::CanFrame & message) const
@@ -194,10 +207,12 @@ class ODrive : public rclcpp::Node
         }
 
         rclcpp::Subscription<can_interface::msg::CanFrame>::SharedPtr canDataSubscription;
-        rclcpp::Subscription<odrive_interface::msg::InputPosition>::SharedPtr inputPositionSubscription;
-        rclcpp::Subscription<odrive_interface::msg::AxisState>::SharedPtr axisStateSubscription;
 
-        rclcpp::Publisher<can_interface::msg::CanFrame>::SharedPtr canDataPublisher;
+        rclcpp::Client<can_interface::srv::CanFrame>::SharedPtr canDataSenderClient;
+
+        rclcpp::Service<odrive_interface::srv::InputPosition>::SharedPtr inputPositionService;
+        rclcpp::Service<odrive_interface::srv::AxisState>::SharedPtr axisStateService;
+
         rclcpp::Publisher<odrive_interface::msg::Heartbeat>::SharedPtr heartbeatPublisher;
         rclcpp::Publisher<odrive_interface::msg::EncoderEstimates>::SharedPtr encoderEstimatePublisher;
 
