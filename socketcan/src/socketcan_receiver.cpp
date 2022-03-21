@@ -139,6 +139,21 @@ class SocketCAN_Receiver : public rclcpp_lifecycle::LifecycleNode
             return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
         }
 
+        ~SocketCAN_Receiver()
+        {
+            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Destructing...");
+
+            if(socketID != SOCKET_CLOSED_PROGRAMATICALLY && close(socketID) < 0)
+            {
+                RCLCPP_FATAL(rclcpp::get_logger("rclcpp"), "Socket Error: Unable to close socket: %s", std::strerror(errno));
+            }
+            socketID = SOCKET_CLOSED_PROGRAMATICALLY;
+
+            publisher.reset();
+
+            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Destructor completed successfully");
+        }
+
     private:
         void receiveData()
         {

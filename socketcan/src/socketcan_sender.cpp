@@ -134,6 +134,21 @@ class SocketCAN_Sender : public rclcpp_lifecycle::LifecycleNode
             return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
         }
 
+        ~SocketCAN_Sender()
+        {
+            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Destructing...");
+
+            if(socketID != SOCKET_CLOSED_PROGRAMATICALLY && close(socketID) < 0)
+            {
+                RCLCPP_FATAL(rclcpp::get_logger("rclcpp"), "Socket Error: Unable to close socket: %s", std::strerror(errno));
+            }
+            socketID = SOCKET_CLOSED_PROGRAMATICALLY;
+
+            service.reset();
+
+            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Destructor completed successfully");
+        }
+
         void serviceCallback (const std::shared_ptr<can_interface::srv::CanFrame::Request> request,
                             std::shared_ptr<can_interface::srv::CanFrame::Response> response)
         {
