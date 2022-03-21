@@ -6,6 +6,9 @@
 #include <memory>
 
 #include "rclcpp/rclcpp.hpp"
+#include "rclcpp_lifecycle/lifecycle_node.hpp"
+#include "rclcpp_lifecycle/lifecycle_publisher.hpp"
+
 #include "can_interface/msg/can_frame.hpp"
 #include "can_interface/srv/can_frame.hpp"
 #include "odrive_interface/msg/heartbeat.hpp"
@@ -16,13 +19,19 @@
 using std::placeholders::_1;
 using std::placeholders::_2;
 
-class ODrive : public rclcpp::Node
+class ODrive : public rclcpp_lifecycle::LifecycleNode
 {
     public:
         ODrive()
-        : Node("ODrive")
+        : LifecycleNode("ODrive")
         {
-            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Starting Up");
+            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Node created");
+        }
+
+        rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
+        on_configure(const rclcpp_lifecycle::State &)
+        {
+            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Configuring...");
 
             this->declare_parameter<std::int32_t>("axis_number", 0);
 
@@ -31,6 +40,94 @@ class ODrive : public rclcpp::Node
             RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Using Axis %d", axisNumber);
 
             createInterfaces();
+
+            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Configuration completed successfully");
+            return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
+        }
+
+        rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
+        on_activate(const rclcpp_lifecycle::State &)
+        {
+            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Activating...");
+
+            heartbeatPublisher->on_activate();
+            encoderEstimatePublisher->on_activate();
+
+            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Activation completed successfully");
+
+            return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
+        }
+
+        rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
+        on_deactivate(const rclcpp_lifecycle::State &)
+        {
+            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Deactivating...");
+
+            heartbeatPublisher->on_deactivate();
+            encoderEstimatePublisher->on_deactivate();
+
+            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Deactivation completed successfully");
+            return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
+        }
+
+        rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
+        on_cleanup(const rclcpp_lifecycle::State &)
+        {
+            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Cleaning Up...");
+
+            currentAxisState = ODRIVE_AXIS_STATE_Undefined;
+            currentPosition = 0;
+            currentVelocity = 0;
+
+            canDataSenderClient.reset();
+            heartbeatPublisher.reset();
+            encoderEstimatePublisher.reset();
+            canDataSubscription.reset();
+            inputPositionService.reset();
+            axisStateService.reset();
+            
+            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Cleanup completed successfully");
+
+            return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
+        }
+
+        rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
+        on_shutdown(const rclcpp_lifecycle::State &)
+        {
+            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Shutting Down...");
+
+            currentAxisState = ODRIVE_AXIS_STATE_Undefined;
+            currentPosition = 0;
+            currentVelocity = 0;
+
+            canDataSenderClient.reset();
+            heartbeatPublisher.reset();
+            encoderEstimatePublisher.reset();
+            canDataSubscription.reset();
+            inputPositionService.reset();
+            axisStateService.reset();
+
+            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Shut down completed successfully");
+
+            return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
+        }
+
+        ~ODrive()
+        {
+            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Shutting Down");
+
+            currentAxisState = ODRIVE_AXIS_STATE_Undefined;
+            currentPosition = 0;
+            currentVelocity = 0;
+
+            canDataSenderClient.reset();
+            heartbeatPublisher.reset();
+            encoderEstimatePublisher.reset();
+            canDataSubscription.reset();
+            inputPositionService.reset();
+            axisStateService.reset();
+            
+            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Shutdown complete. Goodbye!");
         }
 
         enum odrive_commands
@@ -82,19 +179,12 @@ class ODrive : public rclcpp::Node
             ODRIVE_AXIS_STATE_EncoderHallPhaseCalibration = 0x0D
         };
 
-        ~ODrive()
+        enum odrive_activate_sequence_types
         {
-            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Shutting Down");
-
-            canDataSenderClient.reset();
-            heartbeatPublisher.reset();
-            encoderEstimatePublisher.reset();
-            canDataSubscription.reset();
-            inputPositionService.reset();
-            axisStateService.reset();
-            
-            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Shutdown complete. Goodbye!");
-        }
+            ODRIVE_ACTIVATE_SEQUENCE_ImmediateCLosedLoop,   //Immediately go to closed loop control
+            ODRIVE_ACTIVATE_SEQUENCE_EncoderIndexSearch,    //Run encoder index search, then go to closed loop
+            ODRIVE_ACTIVATE_SEQUENCE_FullCalibration        //Run full calibration, then go to closed loop
+        };
 
     private:
         void createInterfaces()
@@ -213,8 +303,8 @@ class ODrive : public rclcpp::Node
         rclcpp::Service<odrive_interface::srv::InputPosition>::SharedPtr inputPositionService;
         rclcpp::Service<odrive_interface::srv::AxisState>::SharedPtr axisStateService;
 
-        rclcpp::Publisher<odrive_interface::msg::Heartbeat>::SharedPtr heartbeatPublisher;
-        rclcpp::Publisher<odrive_interface::msg::EncoderEstimates>::SharedPtr encoderEstimatePublisher;
+        rclcpp_lifecycle::LifecyclePublisher<odrive_interface::msg::Heartbeat>::SharedPtr heartbeatPublisher;
+        rclcpp_lifecycle::LifecyclePublisher<odrive_interface::msg::EncoderEstimates>::SharedPtr encoderEstimatePublisher;
 
         int32_t axisNumber;
         mutable odrive_axis_states currentAxisState;
@@ -225,7 +315,14 @@ class ODrive : public rclcpp::Node
 int main(int argc, char * argv[])
 {
     rclcpp::init(argc, argv);
-    rclcpp::spin(std::make_shared<ODrive>());
-    rclcpp::shutdown();
+    rclcpp::executors::SingleThreadedExecutor exe;
+
+    std::shared_ptr<ODrive> lc_node =
+        std::make_shared<ODrive>();
+
+    exe.add_node(lc_node->get_node_base_interface());
+
+    exe.spin();
+  rclcpp::shutdown();
     return 0;
 }
