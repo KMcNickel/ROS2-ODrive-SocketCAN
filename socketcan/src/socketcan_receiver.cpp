@@ -52,7 +52,7 @@ class SocketCAN_Receiver : public rclcpp_lifecycle::LifecycleNode
 
             receiveThreadExitFutureObj = receiveThreadExitSignal.get_future();
 
-            publisher = this->create_publisher<can_interface::msg::CanFrame>("socketcan/receiver/data", PUBLISHER_QUEUE_SIZE);
+            publisher = this->create_publisher<can_interface::msg::CanFrame>("socketcan/receiver/output/data", PUBLISHER_QUEUE_SIZE);
 
             RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Configuration completed successfully");
             return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;

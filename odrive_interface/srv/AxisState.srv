@@ -1,8 +1,0 @@
-int32 state
----
-int8 status
-
-# OK
-int8 STATUS_OK=0
-# Service Error
-int8 STATUS_ERROR_OTHER_SERVICE_FAILED=1

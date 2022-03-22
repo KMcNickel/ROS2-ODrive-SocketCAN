@@ -49,7 +49,7 @@ class SocketCAN_Sender : public rclcpp_lifecycle::LifecycleNode
                 return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::ERROR;
             }
 
-            service = this->create_service<can_interface::srv::CanFrame>("socketcan/sender", std::bind(&SocketCAN_Sender::serviceCallback, this, _1, _2));
+            service = this->create_service<can_interface::srv::CanFrame>("socketcan/sender/input/data", std::bind(&SocketCAN_Sender::serviceCallback, this, _1, _2));
 
             RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Configuration completed successfully");
             return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;

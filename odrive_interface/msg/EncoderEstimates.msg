@@ -1,2 +1,0 @@
-float32 position_estimate
-float32 velocity_estimate

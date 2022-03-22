@@ -3,6 +3,7 @@ from launch_ros.actions import Node
 
 device_name = "agv0"
 canbus_interface_name = "can0"
+canbus_interface_namespace = "/" + device_name + "/" + canbus_interface_name
 axis_number = 0
 
 def generate_launch_description():
@@ -15,11 +16,18 @@ def generate_launch_description():
             output="screen",
             emulate_tty=True,
             parameters=[
-                {"axis_number": axis_number}
+                {"axis_number": axis_number},
+                {"calibration_type": 1}
             ],
             remappings=[
-                ("odrivecan/receiver/data", "/" + device_name + "/" + canbus_interface_name + "/receiver/data"),
-                ("odrivecan/sender/data", "/" + device_name + "/" + canbus_interface_name + "/sender/data"),
+                ("odrive/input/can", canbus_interface_namespace + "/output/data"),
+                ("odrive/output/can", canbus_interface_namespace + "/input/data"),
+                ("odrive/output/status", "output/status"),
+                ("odrive/input/position", "input/position"),
+                ("odrive/input/velocity", "input/velocity"),
+                ("odrive/input/start", "input/start"),
+                ("odrive/input/shutdown", "input/shutdown"),
+                ("odrive/input/clearErrors", "input/clearErrors"),
             ]
         )
     ])

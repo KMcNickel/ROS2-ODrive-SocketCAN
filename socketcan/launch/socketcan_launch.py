@@ -17,7 +17,7 @@ def generate_launch_description():
                 {"interface_name": can_interface}
             ],
             remappings=[
-                ("socketcan/receiver/data", "receiver/data")
+                ("socketcan/receiver/output/data", "output/data")
             ]
         ),
         Node(
@@ -31,7 +31,7 @@ def generate_launch_description():
                 {"interface_name": can_interface}
             ],
             remappings=[
-                ("socketcan/sender/data", "sender/data")
+                ("socketcan/sender/input/data", "input/data")
             ]
         )
     ])

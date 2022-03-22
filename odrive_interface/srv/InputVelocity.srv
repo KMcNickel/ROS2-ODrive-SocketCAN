@@ -1,0 +1,9 @@
+float32 input_velocity
+int16 torque_feedforward
+---
+int8 status
+
+# OK
+int8 STATUS_OK=0
+# Range Error
+int8 STATUS_ERROR_INPUT_VELOCITY_OUT_OF_RANGE=1
