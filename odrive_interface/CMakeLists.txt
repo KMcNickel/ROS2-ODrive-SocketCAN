@@ -16,7 +16,7 @@ endif()
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/AxisStatus.msg"
-  "srv/InputVelocity.srv"
+  "msg/InputVelocity.msg"
 )
 
 ament_package()

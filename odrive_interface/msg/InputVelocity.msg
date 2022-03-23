@@ -1,0 +1,2 @@
+float32 input_velocity
+int16 torque_feedforward

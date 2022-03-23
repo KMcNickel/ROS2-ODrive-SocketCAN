@@ -15,7 +15,7 @@
 #include "can_interface/msg/can_frame.hpp"
 #include "std_msgs/msg/float64.hpp"
 #include "odrive_interface/msg/axis_status.hpp"
-#include "odrive_interface/srv/input_velocity.hpp"
+#include "odrive_interface/msg/input_velocity.hpp"
 #include "std_srvs/srv/trigger.hpp"
 
 using std::placeholders::_1;
@@ -245,8 +245,8 @@ class ODrive : public rclcpp_lifecycle::LifecycleNode
             watchdogTimerMonitorPublisher = this->create_publisher<std_msgs::msg::Float64>("odrive/debug/output/watchdog", 10);
             canDataSubscription = this->create_subscription<can_interface::msg::CanFrame>(
                 "odrive/input/can", 50, std::bind(&ODrive::canDataReceived, this, _1));
-            inputVelocityService = this->create_service<odrive_interface::srv::InputVelocity>(
-                "odrive/input/velocity", std::bind(&ODrive::setInputVelocity, this, _1, _2));
+            inputVelocitySubscription = this->create_subscription<odrive_interface::msg::InputVelocity>(
+                "odrive/input/velocity", 50, std::bind(&ODrive::setInputVelocity, this, _1));
             axisStartupService = this->create_service<std_srvs::srv::Trigger>(
                 "odrive/input/start", std::bind(&ODrive::startupAxis, this, _1, _2));
             axisShutdownService = this->create_service<std_srvs::srv::Trigger>(
@@ -281,7 +281,7 @@ class ODrive : public rclcpp_lifecycle::LifecycleNode
 
             canDataSubscription.reset();
             canDataPublisher.reset();
-            inputVelocityService.reset();
+            inputVelocitySubscription.reset();
             axisStartupService.reset();
             axisShutdownService.reset();
             clearErrorService.reset();
@@ -471,13 +471,13 @@ class ODrive : public rclcpp_lifecycle::LifecycleNode
             }
         }
 
-        void setInputVelocity(const std::shared_ptr<odrive_interface::srv::InputVelocity::Request> request,
-                            std::shared_ptr<odrive_interface::srv::InputVelocity::Response> response)
+        void setInputVelocity(const odrive_interface::msg::InputVelocity & message)
         {
             RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Received new input velocity request:\n\tVelocity: %f\n\tTorque_FF: %d",
-                request->input_velocity, request->torque_feedforward);
+                message.input_velocity, message.torque_feedforward);
 
-            response->success = sendSetInputVelocity(request->input_velocity, request->torque_feedforward);
+            if(!sendSetInputVelocity(message.input_velocity, message.torque_feedforward))
+                RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Unable to send input velocity message");
         }
 
         bool sendSetInputVelocity(float velocity, int16_t torque_ff)
@@ -685,10 +685,10 @@ class ODrive : public rclcpp_lifecycle::LifecycleNode
         }
 
         rclcpp::Subscription<can_interface::msg::CanFrame>::SharedPtr canDataSubscription;
+        rclcpp::Subscription<odrive_interface::msg::InputVelocity>::SharedPtr inputVelocitySubscription;
 
         rclcpp_lifecycle::LifecyclePublisher<can_interface::msg::CanFrame>::SharedPtr canDataPublisher;
 
-        rclcpp::Service<odrive_interface::srv::InputVelocity>::SharedPtr inputVelocityService;
         rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr axisStartupService;
         rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr axisShutdownService;
         rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr clearErrorService;
