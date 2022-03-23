@@ -36,13 +36,13 @@ class ODrive : public rclcpp_lifecycle::LifecycleNode
         explicit ODrive()
         : LifecycleNode("ODrive")
         {
-            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Node created");
+            RCLCPP_INFO(rclcpp::get_logger("Constructor"), "Node created");
         }
 
         rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
         on_configure(const rclcpp_lifecycle::State &)
         {
-            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Configuring...");
+            RCLCPP_INFO(rclcpp::get_logger("on_configure"), "Configuring...");
 
             this->declare_parameter<std::int32_t>("axis_number", 0);
             this->declare_parameter<std::int32_t>("calibration_type", 0);
@@ -52,12 +52,12 @@ class ODrive : public rclcpp_lifecycle::LifecycleNode
             this->get_parameter("calibration_type", calibrationType);
             this->get_parameter("publish_debug_messages", publishDebugMessages);
 
-            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Using Axis %d", axisNumber);
+            RCLCPP_INFO(rclcpp::get_logger("on_configure"), "Using Axis %d", axisNumber);
 
             createInterfaces();
             createTimers();
 
-            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Configuration completed successfully");
+            RCLCPP_INFO(rclcpp::get_logger("on_configure"), "Configuration completed successfully");
             return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
         }
 
@@ -66,7 +66,7 @@ class ODrive : public rclcpp_lifecycle::LifecycleNode
         {
             bool stateSuccess;
 
-            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Activating...");
+            RCLCPP_INFO(rclcpp::get_logger("on_activate"), "Activating...");
 
             axisStatusPublisher->on_activate();
             canDataPublisher->on_activate();
@@ -76,12 +76,12 @@ class ODrive : public rclcpp_lifecycle::LifecycleNode
 
             if(stateSuccess)
             {
-                RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Activation completed successfully");
+                RCLCPP_INFO(rclcpp::get_logger("on_activate"), "Activation completed successfully");
                 return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
             }
             else
             {
-                RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Activation failed to set axis state");
+                RCLCPP_INFO(rclcpp::get_logger("on_activate"), "Activation failed to set axis state");
                 return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::ERROR;
             }
         }
@@ -89,24 +89,24 @@ class ODrive : public rclcpp_lifecycle::LifecycleNode
         rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
         on_deactivate(const rclcpp_lifecycle::State &)
         {
-            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Deactivating...");
+            RCLCPP_INFO(rclcpp::get_logger("on_deactivate"), "Deactivating...");
 
             axisStatusPublisher->on_deactivate();
             canDataPublisher->on_deactivate();
             watchdogTimerMonitorPublisher->on_deactivate();
 
-            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Deactivation completed successfully");
+            RCLCPP_INFO(rclcpp::get_logger("on_deactivate"), "Deactivation completed successfully");
             return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
         }
 
         rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
         on_cleanup(const rclcpp_lifecycle::State &)
         {
-            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Cleaning Up...");
+            RCLCPP_INFO(rclcpp::get_logger("on_cleanup"), "Cleaning Up...");
 
             resetVariables();
             
-            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Cleanup completed successfully");
+            RCLCPP_INFO(rclcpp::get_logger("on_cleanup"), "Cleanup completed successfully");
 
             return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
         }
@@ -114,22 +114,22 @@ class ODrive : public rclcpp_lifecycle::LifecycleNode
         rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
         on_shutdown(const rclcpp_lifecycle::State &)
         {
-            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Shutting Down...");
+            RCLCPP_INFO(rclcpp::get_logger("on_shutdown"), "Shutting Down...");
 
             resetVariables();
 
-            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Shut down completed successfully");
+            RCLCPP_INFO(rclcpp::get_logger("on_shutdown"), "Shut down completed successfully");
 
             return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
         }
 
         ~ODrive()
         {
-            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Shutting Down");
+            RCLCPP_INFO(rclcpp::get_logger("Destructor"), "Shutting Down");
 
             resetVariables();
             
-            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Shutdown complete. Goodbye!");
+            RCLCPP_INFO(rclcpp::get_logger("Destructor"), "Shutdown complete. Goodbye!");
         }
 
         enum odrive_commands
@@ -310,7 +310,7 @@ class ODrive : public rclcpp_lifecycle::LifecycleNode
 
             if(currentSystemStatus == ODRIVE_SYSTEM_STATUS_ERROR && !currentSystemErrors.ErrorsExist())
             {
-                RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "All errors have been cleared");
+                RCLCPP_INFO(rclcpp::get_logger("ExecuteMaintenanceFunctions"), "All errors have been cleared");
                 sendAxisStateRequest(ODRIVE_AXIS_STATE_Idle);
                 ChangeSystemStatus(ODRIVE_SYSTEM_STATUS_NOT_READY);
             }
@@ -320,7 +320,7 @@ class ODrive : public rclcpp_lifecycle::LifecycleNode
         {
             if(newStatus == currentSystemStatus) return;
 
-            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Changing status from %d to %d", currentSystemStatus, newStatus);
+            RCLCPP_INFO(rclcpp::get_logger("ChangeSystemStatus"), "Changing status from %d to %d", currentSystemStatus, newStatus);
 
             currentSystemStatus = newStatus;
 
@@ -336,7 +336,7 @@ class ODrive : public rclcpp_lifecycle::LifecycleNode
 
         void WatchdogExpired(float duration)
         {
-            RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "ODrive Board Watchdog timed out after %f seconds", duration);
+            RCLCPP_ERROR(rclcpp::get_logger("WatchdogExpired"), "ODrive Board Watchdog timed out after %f seconds", duration);
             currentSystemErrors.WatchdogFromODriveTimeoutError = true;
             ChangeSystemStatus(ODRIVE_SYSTEM_STATUS_ERROR);
         }
@@ -352,15 +352,15 @@ class ODrive : public rclcpp_lifecycle::LifecycleNode
         {
             if(!canDataPublisher->is_activated()) return;
             if(!SendCanData(ODRIVE_COMMAND_GetEncoderError, 0, 0, true))
-                RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "Unable to request encoder error");
+                RCLCPP_WARN(rclcpp::get_logger("RequestErrors"), "Unable to request encoder error");
             if(!SendCanData(ODRIVE_COMMAND_GetMotorError, 0, 0, true))
-                RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "Unable to request motor error");
+                RCLCPP_WARN(rclcpp::get_logger("RequestErrors"), "Unable to request motor error");
         }
 
         void startupAxis(const std::shared_ptr<std_srvs::srv::Trigger::Request>,
                             std::shared_ptr<std_srvs::srv::Trigger::Response> response)
         {
-            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Executing axis startup");
+            RCLCPP_INFO(rclcpp::get_logger("startupAxis"), "Executing axis startup");
 
             switch(currentSystemStatus)
             {
@@ -379,24 +379,24 @@ class ODrive : public rclcpp_lifecycle::LifecycleNode
                     }
                     if(response->success)
                     {
-                        RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Starting axis calibration");
+                        RCLCPP_INFO(rclcpp::get_logger("startupAxis"), "Starting axis calibration");
                         ChangeSystemStatus(ODRIVE_SYSTEM_STATUS_CALIBRATING);
                     }
                     else
-                        RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "Aborting axis startup");
+                        RCLCPP_WARN(rclcpp::get_logger("startupAxis"), "Aborting axis startup");
                     break;
                 case ODRIVE_SYSTEM_STATUS_IDLE:
                     
                     response->success = sendAxisStateRequest(ODRIVE_AXIS_STATE_ClosedLoopControl);
                     if(response->success)
-                        RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Starting axis in closed loop");
+                        RCLCPP_INFO(rclcpp::get_logger("startupAxis"), "Starting axis in closed loop");
                     else
-                        RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "Unable to start axis closed loop");
+                        RCLCPP_WARN(rclcpp::get_logger("startupAxis"), "Unable to start axis closed loop");
                     break;
                 default:
                     response->success = false;
                     response->message = "System status is not correct to start axis";
-                    RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "Not starting axis due to incorrect status: %d", currentSystemStatus);
+                    RCLCPP_WARN(rclcpp::get_logger("startupAxis"), "Not starting axis due to incorrect status: %d", currentSystemStatus);
                     break;
             }
         }
@@ -404,7 +404,7 @@ class ODrive : public rclcpp_lifecycle::LifecycleNode
         void shutdownAxis(const std::shared_ptr<std_srvs::srv::Trigger::Request>,
                             std::shared_ptr<std_srvs::srv::Trigger::Response> response)
         {
-            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Executing axis shutdown");
+            RCLCPP_INFO(rclcpp::get_logger("shutdownAxis"), "Executing axis shutdown");
             response->success = sendAxisStateRequest(ODRIVE_AXIS_STATE_Idle);
             if(response->success)
             {
@@ -413,12 +413,12 @@ class ODrive : public rclcpp_lifecycle::LifecycleNode
                 else if(currentSystemStatus == ODRIVE_SYSTEM_STATUS_ERROR) ; //Leave it in error
                 else
                     ChangeSystemStatus(ODRIVE_SYSTEM_STATUS_NOT_READY);
-                RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Axis is shutting down");
+                RCLCPP_INFO(rclcpp::get_logger("shutdownAxis"), "Axis is shutting down");
             }
             else
             {
                 ChangeSystemStatus(ODRIVE_SYSTEM_STATUS_ERROR);
-                RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Unable to shutdown axis");
+                RCLCPP_ERROR(rclcpp::get_logger("shutdownAxis"), "Unable to shutdown axis");
             }
         }
 
@@ -431,7 +431,7 @@ class ODrive : public rclcpp_lifecycle::LifecycleNode
 
         void attemptToClearErrors()
         {
-            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Clearing errors");
+            RCLCPP_INFO(rclcpp::get_logger("attemptToClearErrors"), "Clearing errors");
 
             SendCanData(ODRIVE_COMMAND_ClearErrors, 0, 0);
 
@@ -450,7 +450,7 @@ class ODrive : public rclcpp_lifecycle::LifecycleNode
 
         bool sendRebootCommand()
         {
-            RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Sending reboot command");
+            RCLCPP_DEBUG(rclcpp::get_logger("sendRebootCommand"), "Sending reboot command");
 
             if(currentSystemStatus != ODRIVE_SYSTEM_STATUS_ERROR)
                 ChangeSystemStatus(ODRIVE_SYSTEM_STATUS_NOT_READY);
@@ -464,7 +464,7 @@ class ODrive : public rclcpp_lifecycle::LifecycleNode
             {
                 if((this->now() - lastIncomingVelocityMessage).seconds() > MILLISECOND_TO_SECOND(INCOMING_VELOCITY_WATCHDOG_TIMEOUT))
                 {
-                    RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Incoming Velocity Timer expired.");
+                    RCLCPP_ERROR(rclcpp::get_logger("incomingVelocityWatchdogElapsed"), "Incoming Velocity Timer expired.");
                     currentSystemErrors.IncomingVelocityTimeoutError = currentSystemErrors.IncomingVelocityTimeoutErrorLatch = true;
                     ChangeSystemStatus(ODRIVE_SYSTEM_STATUS_ERROR);
                 }
@@ -473,11 +473,11 @@ class ODrive : public rclcpp_lifecycle::LifecycleNode
 
         void setInputVelocity(const odrive_interface::msg::InputVelocity & message)
         {
-            RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Received new input velocity request:\n\tVelocity: %f\n\tTorque_FF: %d",
+            RCLCPP_DEBUG(rclcpp::get_logger("setInputVelocity"), "Received new input velocity request:\n\tVelocity: %f\n\tTorque_FF: %d",
                 message.input_velocity, message.torque_feedforward);
 
             if(!sendSetInputVelocity(message.input_velocity, message.torque_feedforward))
-                RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Unable to send input velocity message");
+                RCLCPP_DEBUG(rclcpp::get_logger("setInputVelocity"), "Unable to send input velocity message");
         }
 
         bool sendSetInputVelocity(float velocity, int16_t torque_ff)
@@ -486,18 +486,18 @@ class ODrive : public rclcpp_lifecycle::LifecycleNode
             {
                 if(velocity != 0)
                 {
-                    RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "Cannot send new input velocity. Errors exist");
+                    RCLCPP_WARN(rclcpp::get_logger("sendSetInputVelocity"), "Cannot send new input velocity. Errors exist");
                     return false;
                 }
                 else
-                    RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "Errors exist while attempting to send 0 velocity");
+                    RCLCPP_WARN(rclcpp::get_logger("sendSetInputVelocity"), "Errors exist while attempting to send 0 velocity");
             }
 
             lastIncomingVelocityMessage = this->now();
             lastInputVelocity = velocity;
             currentSystemErrors.IncomingVelocityTimeoutError = false;
 
-            RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Sending new input velocity request:\n\tVelocity: %f\n\tTorque_FF: %d",
+            RCLCPP_DEBUG(rclcpp::get_logger("sendSetInputVelocity"), "Sending new input velocity request:\n\tVelocity: %f\n\tTorque_FF: %d",
                 velocity, torque_ff);
 
             int8_t data[8];
@@ -514,25 +514,25 @@ class ODrive : public rclcpp_lifecycle::LifecycleNode
             {
                 if(newState != ODRIVE_AXIS_STATE_Idle)
                 {
-                    RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "Cannot send new axis state. Errors exist");
+                    RCLCPP_WARN(rclcpp::get_logger("sendAxisStateRequest"), "Cannot send new axis state. Errors exist");
                     return false;
                 }
                 else
-                    RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "Attempting to send idle state while errors exist");
+                    RCLCPP_WARN(rclcpp::get_logger("sendAxisStateRequest"), "Attempting to send idle state while errors exist");
             }
 
             if(newState == ODRIVE_AXIS_STATE_ClosedLoopControl)
             {
-                RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Setting velocity to 0");
+                RCLCPP_INFO(rclcpp::get_logger("sendAxisStateRequest"), "Setting velocity to 0");
 
                 if(!sendSetInputVelocity(0, 0))
                 {
-                    RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "Cannot send velocity. State will not change");
+                    RCLCPP_WARN(rclcpp::get_logger("sendAxisStateRequest"), "Cannot send velocity. State will not change");
                     return false;
                 }
             }
 
-            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Sending new state request: %d", (int32_t) newState);
+            RCLCPP_INFO(rclcpp::get_logger("sendAxisStateRequest"), "Sending new state request: %d", (int32_t) newState);
 
             int8_t data[8];
 
@@ -552,7 +552,7 @@ class ODrive : public rclcpp_lifecycle::LifecycleNode
 
             if(dataLen > CAN_DLC_MAX_SIZE)
             {
-                RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Requested data DLC is too big");
+                RCLCPP_ERROR(rclcpp::get_logger("SendCanData"), "Requested data DLC is too big");
                 return false;
             }
 
@@ -565,11 +565,11 @@ class ODrive : public rclcpp_lifecycle::LifecycleNode
 
             if(!canDataPublisher->is_activated())
             {
-                RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "CAN publisher is inactive");
+                RCLCPP_WARN(rclcpp::get_logger("SendCanData"), "CAN publisher is inactive");
                 return false;
             }
 
-            RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Sending data to CAN");
+            RCLCPP_DEBUG(rclcpp::get_logger("SendCanData"), "Sending data to CAN");
 
             canDataPublisher->publish(message);
             return true;
@@ -586,13 +586,13 @@ class ODrive : public rclcpp_lifecycle::LifecycleNode
 
             if(this->get_current_state().id() != 3)     //3 is the "active" lifecycle state
             {
-                RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Ignoring data while in current state");
+                RCLCPP_DEBUG(rclcpp::get_logger("canDataReceived"), "Ignoring data while in current state");
                 return;
             }
 
             cmd_id = message.can_id & 0b00011111;
 
-            RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Processing message of command: %d", cmd_id);
+            RCLCPP_DEBUG(rclcpp::get_logger("canDataReceived"), "Processing message of command: %d", cmd_id);
 
             switch((odrive_commands) cmd_id)
             {
@@ -625,12 +625,12 @@ class ODrive : public rclcpp_lifecycle::LifecycleNode
                 {
                     ChangeSystemStatus(ODRIVE_SYSTEM_STATUS_ERROR);
                 }
-                RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Axis error changed to: %d", currentSystemErrors.AxisError);
+                RCLCPP_INFO(rclcpp::get_logger("UpdateHeartbeat"), "Axis error changed to: %d", currentSystemErrors.AxisError);
             }
 
             if(oldAxisState != currentAxisState)
             {
-                RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Axis state changed to: %d", currentAxisState);
+                RCLCPP_INFO(rclcpp::get_logger("UpdateHeartbeat"), "Axis state changed to: %d", currentAxisState);
 
                 if(currentSystemStatus == ODRIVE_SYSTEM_STATUS_CALIBRATING && currentAxisState == ODRIVE_AXIS_STATE_Idle)
                     sendAxisStateRequest(ODRIVE_AXIS_STATE_ClosedLoopControl);
@@ -663,7 +663,7 @@ class ODrive : public rclcpp_lifecycle::LifecycleNode
                     currentSystemErrors.EncoderError = errorCode;
                     break;
                 default:
-                    RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "An illegal message value was passed to update errors: %d", (int32_t) command);
+                    RCLCPP_WARN(rclcpp::get_logger("UpdateErrors"), "An illegal message value was passed to update errors: %d", (int32_t) command);
             }
 
             if(currentSystemErrors.ErrorsExist()) 
@@ -679,6 +679,16 @@ class ODrive : public rclcpp_lifecycle::LifecycleNode
             message.axis_status = currentSystemStatus;
             message.current_position = currentPosition;
             message.current_velocity = currentVelocity;
+
+            message.board_error = currentSystemErrors.BoardError;
+            message.axis_error = currentSystemErrors.AxisError;
+            message.motor_error = currentSystemErrors.MotorError;
+            message.controller_error = currentSystemErrors.ControllerError;
+            message.encoder_error = currentSystemErrors.EncoderError;
+
+            message.watchdog_from_odrive_timeout_error = currentSystemErrors.WatchdogFromODriveTimeoutError;
+            message.incoming_velocity_timeout_error = currentSystemErrors.IncomingVelocityTimeoutError;
+            message.incoming_velocity_timeout_error_latch = currentSystemErrors.IncomingVelocityTimeoutErrorLatch;
 
             if(axisStatusPublisher->is_activated())
                 axisStatusPublisher->publish(message);
