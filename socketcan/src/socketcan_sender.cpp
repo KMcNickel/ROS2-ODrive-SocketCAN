@@ -50,7 +50,7 @@ class SocketCAN_Sender : public rclcpp_lifecycle::LifecycleNode
             }
 
             subscription = this->create_subscription<can_interface::msg::CanFrame>("socketcan/sender/input/data", 10,
-                std::bind(&SocketCAN_Sender::subscritionCallback, this, _1));
+                std::bind(&SocketCAN_Sender::subscriptionCallback, this, _1));
 
             RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Configuration completed successfully");
             return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
@@ -150,10 +150,18 @@ class SocketCAN_Sender : public rclcpp_lifecycle::LifecycleNode
             RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Destructor completed successfully");
         }
 
-        void subscritionCallback(const can_interface::msg::CanFrame & incomingData)
+        void subscriptionCallback(const can_interface::msg::CanFrame & incomingData)
         {
-            int err;
+            int err = 0;
             can_frame outgoingFrame;
+
+            RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Data incoming");
+
+            if(this->get_current_state().id() != 3)     //3 is the "active" lifecycle state
+            {
+                RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Ignoring data while in current state");
+                return;
+            }
 
             if(incomingData.dlc > MAX_DLC_LENGTH)
             {
@@ -165,14 +173,18 @@ class SocketCAN_Sender : public rclcpp_lifecycle::LifecycleNode
 
             if((incomingData.is_extended_id && (incomingData.can_id & CAN_ID_LARGER_THAN_29_BIT_MASK))
                     || (!incomingData.is_extended_id && (incomingData.can_id & CAN_ID_LARGER_THAN_11_BIT_MASK)))
-                {
-                    RCLCPP_WARN(rclcpp::get_logger("rclcpp"), 
-                                "Message was sent with an invalid ID: %d", 
-                                incomingData.can_id);
-                    err = -1;
-                }
+            {
+                RCLCPP_WARN(rclcpp::get_logger("rclcpp"), 
+                            "Message was sent with an invalid ID: %d", 
+                            incomingData.can_id);
+                err += -2;
+            }
             
-            if(err != 0) return;        //Any errors above should cancel the send
+            if(err != 0)
+            {
+                RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "Message will not be sent");
+                return;
+            }
 
             outgoingFrame.can_id = incomingData.is_extended_id;
             outgoingFrame.can_id = (outgoingFrame.can_id << 1) | incomingData.is_remote_request;
@@ -181,7 +193,7 @@ class SocketCAN_Sender : public rclcpp_lifecycle::LifecycleNode
             outgoingFrame.can_dlc = incomingData.dlc;
             std::copy(std::begin(incomingData.data), std::end(incomingData.data), std::begin(outgoingFrame.data));
 
-            RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Sending:\n\tID: %X\n\tLength: %d\n\t\n\tData: %X %X %X %X %X %X %X %X",
+            RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Sending:\n\tID: 0x%X\n\tLength: %d\n\tData: 0x%X 0x%X 0x%X 0x%X 0x%X 0x%X 0x%X 0x%X",
                     outgoingFrame.can_id, outgoingFrame.can_dlc, outgoingFrame.data[0], outgoingFrame.data[1], outgoingFrame.data[2],
                     outgoingFrame.data[3], outgoingFrame.data[4], outgoingFrame.data[5], outgoingFrame.data[6], outgoingFrame.data[7]);
                 
@@ -190,7 +202,7 @@ class SocketCAN_Sender : public rclcpp_lifecycle::LifecycleNode
                 if(err < 0)
                     RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Socket Error: Unable to write data: %s", std::strerror(errno));
                 else
-                    RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Socket Error: Could only write: %s bytes", std::strerror(errno));
+                    RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Socket Error: Could only write: %d bytes", err);
                 return;
             }
             RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Frame sent successfully");
