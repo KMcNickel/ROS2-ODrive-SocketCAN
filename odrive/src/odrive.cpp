@@ -204,7 +204,6 @@ class ODrive : public rclcpp_lifecycle::LifecycleNode
             int64_t MotorError;
             int8_t ControllerError;
             int16_t EncoderError;
-            int8_t SensorlessError;
 
             bool WatchdogFromODriveTimeoutError;
             bool IncomingVelocityTimeoutError;
@@ -213,7 +212,7 @@ class ODrive : public rclcpp_lifecycle::LifecycleNode
             odrive_node_errors()
             {
                 BoardError = AxisError = MotorError = ControllerError = 
-                EncoderError = SensorlessError = 0;
+                EncoderError = 0;
 
                 WatchdogFromODriveTimeoutError = 
                 IncomingVelocityTimeoutError = 
@@ -223,7 +222,7 @@ class ODrive : public rclcpp_lifecycle::LifecycleNode
             bool ODriveErrorsExist() 
             {
                 return BoardError || AxisError || MotorError || 
-                    ControllerError || EncoderError || SensorlessError;
+                    ControllerError || EncoderError;
             }
 
             bool NodeErrorsExist()
@@ -356,8 +355,6 @@ class ODrive : public rclcpp_lifecycle::LifecycleNode
                 RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "Unable to request encoder error");
             if(!SendCanData(ODRIVE_COMMAND_GetMotorError, 0, 0, true))
                 RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "Unable to request motor error");
-            if(!SendCanData(ODRIVE_COMMAND_GetSensorlessError, 0, 0, true))
-                RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "Unable to request sensorless error");
         }
 
         void startupAxis(const std::shared_ptr<std_srvs::srv::Trigger::Request>,
@@ -607,7 +604,6 @@ class ODrive : public rclcpp_lifecycle::LifecycleNode
                     break;
                 case ODRIVE_COMMAND_GetMotorError:
                 case ODRIVE_COMMAND_GetEncoderError:
-                case ODRIVE_COMMAND_GetSensorlessError:
                     UpdateErrors((odrive_commands) cmd_id, message.data);
                     break;
                 default:
@@ -665,9 +661,6 @@ class ODrive : public rclcpp_lifecycle::LifecycleNode
                     break;
                 case ODRIVE_COMMAND_GetEncoderError:
                     currentSystemErrors.EncoderError = errorCode;
-                    break;
-                case ODRIVE_COMMAND_GetSensorlessError:
-                    currentSystemErrors.SensorlessError = errorCode;
                     break;
                 default:
                     RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "An illegal message value was passed to update errors: %d", (int32_t) command);
