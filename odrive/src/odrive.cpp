@@ -320,7 +320,7 @@ class ODrive : public rclcpp_lifecycle::LifecycleNode
         {
             if(newStatus == currentSystemStatus) return;
 
-            RCLCPP_INFO(rclcpp::get_logger("ChangeSystemStatus"), "Changing status from %d to %d", currentSystemStatus, newStatus);
+            RCLCPP_INFO(rclcpp::get_logger("ChangeSystemStatus"), "Changing status to %d", newStatus);
 
             currentSystemStatus = newStatus;
 
@@ -490,7 +490,7 @@ class ODrive : public rclcpp_lifecycle::LifecycleNode
                     return false;
                 }
                 else
-                    RCLCPP_WARN(rclcpp::get_logger("sendSetInputVelocity"), "Errors exist while attempting to send 0 velocity");
+                    RCLCPP_WARN(rclcpp::get_logger("sendSetInputVelocity"), "Attempting to send 0 velocity while errors exist");
             }
 
             lastIncomingVelocityMessage = this->now();
