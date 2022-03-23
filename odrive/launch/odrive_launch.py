@@ -17,7 +17,8 @@ def generate_launch_description():
             emulate_tty=True,
             parameters=[
                 {"axis_number": axis_number},
-                {"calibration_type": 1}
+                {"calibration_type": 1},
+                {"publish_debug_messages": True}
             ],
             remappings=[
                 ("odrive/input/can", canbus_interface_namespace + "/output/data"),
@@ -28,6 +29,7 @@ def generate_launch_description():
                 ("odrive/input/start", "input/start"),
                 ("odrive/input/shutdown", "input/shutdown"),
                 ("odrive/input/clearErrors", "input/clearErrors"),
+                ("odrive/input/reboot", "input/reboot"),
             ]
         )
     ])

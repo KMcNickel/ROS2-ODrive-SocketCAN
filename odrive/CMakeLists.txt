@@ -7,10 +7,11 @@ endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
-find_package(rclcpp_lifecycle)
-find_package(can_interface)
-find_package(odrive_interface)
-find_package(std_srvs)
+find_package(rclcpp_lifecycle REQUIRED)
+find_package(can_interface REQUIRED)
+find_package(odrive_interface REQUIRED)
+find_package(std_srvs REQUIRED)
+find_package(std_msgs REQUIRED)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
@@ -23,7 +24,8 @@ ament_target_dependencies(odrive
   rclcpp_lifecycle
   can_interface
   odrive_interface
-  std_srvs)
+  std_srvs
+  std_msgs)
 
 install(TARGETS odrive
   DESTINATION lib/${PROJECT_NAME})

@@ -14,6 +14,8 @@
   <depend>rclcpp</depend>
   <depend>can_interface</depend>
   <depend>odrive_interface</depend>
+  <depend>std_srvs</depend>
+  <depend>std_msgs</depend>
 
   <export>
     <build_type>ament_cmake</build_type>
