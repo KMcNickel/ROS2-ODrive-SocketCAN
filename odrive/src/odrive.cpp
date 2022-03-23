@@ -266,18 +266,29 @@ class ODrive : public rclcpp_lifecycle::LifecycleNode
         void shutdownAxis(const std::shared_ptr<std_srvs::srv::Trigger::Request>,
                             std::shared_ptr<std_srvs::srv::Trigger::Response> response)
         {
-            sendAxisStateRequest(ODRIVE_AXIS_STATE_Idle);
+            bool requestSucceeded;
+            std::string requestMessage;
+            std::tie(requestSucceeded, requestMessage) = sendAxisStateRequest(ODRIVE_AXIS_STATE_Idle);
             
-            response->success = true;
-            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Shutting down axis");
+            if(requestSucceeded)
+                RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Shutting down axis");
+            else
+                RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "Unable to shut down axis");
+
+            response->success = requestSucceeded;
+            response->message = requestMessage;
         }
 
         void clearErrors(const std::shared_ptr<std_srvs::srv::Trigger::Request>,
                             std::shared_ptr<std_srvs::srv::Trigger::Response> response)
         {
-            sendClearErrorRequest();
-            currentAxisStatus = ODRIVE_AXIS_STATUS_NOT_READY;       //Hacky since the Odrive board errors are not reportable
-            response->success = true;
+            bool requestSucceeded;
+            std::string requestMessage;
+            std::tie(requestSucceeded, requestMessage) = sendClearErrorRequest();
+            if(requestSucceeded)
+                currentAxisStatus = ODRIVE_AXIS_STATUS_NOT_READY;       //Hacky since the Odrive board errors are not reportable
+            response->success = requestSucceeded;
+            response->message = requestMessage;
         }
 
         void setInputPosition(const std::shared_ptr<odrive_interface::srv::InputPosition::Request> request,
@@ -294,7 +305,23 @@ class ODrive : public rclcpp_lifecycle::LifecycleNode
 
             response->status = response->STATUS_OK;
 
-            canDataSenderClient->async_send_request(canRequest);
+            auto future = canDataSenderClient->async_send_request(canRequest);
+
+            if(future.wait_for(std::chrono::milliseconds(CAN_SERVICE_WAIT_TIMEOUT)) == std::future_status::ready)
+            {
+                if(future.get().get()->status == future.get().get()->STATUS_OK)
+                    response->status = response->STATUS_OK
+                else
+                {
+                    RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "CAN service return status code: %d", future.get().get()->status);
+                    response->status = response->STATUS_ERROR_UPSTREAM_SERVICE_RETURNED_ERROR
+                }
+            }
+            else
+            {
+                RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "CAN service did not respond");
+                response->status = response->STATUS_ERROR_UPSTREAM_SERVICE_TIMED_OUT;
+            }
         }
 
         void setInputVelocity(const std::shared_ptr<odrive_interface::srv::InputVelocity::Request> request,
@@ -308,32 +335,26 @@ class ODrive : public rclcpp_lifecycle::LifecycleNode
             memcpy(canRequest->frame.data.data(), &request->input_velocity, sizeof(request->input_velocity));
             memcpy(canRequest->frame.data.data() + 4, &request->torque_feedforward, sizeof(request->torque_feedforward));
 
-            std::shared_future<std::shared_ptr<can_interface::srv::CanFrame::Response>>
-                future = canDataSenderClient->async_send_request(canRequest);
+            auto future = canDataSenderClient->async_send_request(canRequest);
 
             if(future.wait_for(std::chrono::milliseconds(CAN_SERVICE_WAIT_TIMEOUT)) == std::future_status::ready)
             {
                 if(future.get().get()->status == future.get().get()->STATUS_OK)
-                {
-                    response->status = response->STATUS_OK;
-                    return;
-                }
+                    response->status = response->STATUS_OK
                 else
                 {
-                    response->status = response->STATUS_ERROR_UPSTREAM_SERVICE_RETURNED_ERROR;
-                    RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "Sending input velocity message returned code: %d", future.get().get()->status);
-                    return;
+                    RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "CAN service return status code: %d", future.get().get()->status);
+                    response->status = response->STATUS_ERROR_UPSTREAM_SERVICE_RETURNED_ERROR
                 }
             }
             else
             {
-                response->status = response->STATUS_ERROR_UPSTREAM_SERVICE_RETURNED_ERROR;
-                RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "Sending input velocity timed out");
-                return;
+                RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "CAN service did not respond");
+                response->status = response->STATUS_ERROR_UPSTREAM_SERVICE_TIMED_OUT;
             }
         }
 
-        bool sendClearErrorRequest()
+        std::tuple<bool, std::string> sendClearErrorRequest()
         {
             auto canRequest = std::make_shared<can_interface::srv::CanFrame::Request>();
 
@@ -341,23 +362,22 @@ class ODrive : public rclcpp_lifecycle::LifecycleNode
             canRequest->frame.is_error = canRequest->frame.is_extended_id = canRequest->frame.is_remote_request = 0;
             canRequest->frame.dlc = 8;
 
-            std::shared_future<std::shared_ptr<can_interface::srv::CanFrame::Response>>
-                future = canDataSenderClient->async_send_request(canRequest);
+            auto future = canDataSenderClient->async_send_request(canRequest);
 
             if(future.wait_for(std::chrono::milliseconds(CAN_SERVICE_WAIT_TIMEOUT)) == std::future_status::ready)
             {
                 if(future.get().get()->status == future.get().get()->STATUS_OK)
-                    return true;
+                    return std::make_tuple(true, "");
                 else
                 {
-                    RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "Sending clear error message returned code: %d", future.get().get()->status);
-                    return false;
+                    RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "CAN service return status code: %d", future.get().get()->status);
+                    return std::make_tuple(false, "Upstream service returned an error");
                 }
             }
             else
             {
-                RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "Sending clear error message timed out");
-                return false;
+                RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "CAN service did not respond");
+                return std::make_tuple(false, "Upstream service timed out");
             }
         }
 
