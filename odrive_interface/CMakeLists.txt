@@ -16,7 +16,6 @@ endif()
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/AxisStatus.msg"
-  "srv/InputPosition.srv"
   "srv/InputVelocity.srv"
 )
 

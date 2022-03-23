@@ -24,7 +24,6 @@ def generate_launch_description():
                 ("odrive/input/can", canbus_interface_namespace + "/output/data"),
                 ("odrive/output/can", canbus_interface_namespace + "/input/data"),
                 ("odrive/output/status", "output/status"),
-                ("odrive/input/position", "input/position"),
                 ("odrive/input/velocity", "input/velocity"),
                 ("odrive/input/start", "input/start"),
                 ("odrive/input/shutdown", "input/shutdown"),

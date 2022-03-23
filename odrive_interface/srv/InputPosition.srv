@@ -1,6 +1,0 @@
-float32 input_position
-int16 velocity_feedforward
-int16 torque_feedforward
----
-bool success
-string message
