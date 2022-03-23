@@ -15,7 +15,7 @@
 
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
-#include "can_interface/srv/can_frame.hpp"
+#include "can_interface/msg/can_frame.hpp"
 
 #define MAX_DLC_LENGTH 8
 #define SOCKET_CLOSED_PROGRAMATICALLY -10
@@ -49,7 +49,8 @@ class SocketCAN_Sender : public rclcpp_lifecycle::LifecycleNode
                 return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::ERROR;
             }
 
-            service = this->create_service<can_interface::srv::CanFrame>("socketcan/sender/input/data", std::bind(&SocketCAN_Sender::serviceCallback, this, _1, _2));
+            subscription = this->create_subscription<can_interface::msg::CanFrame>("socketcan/sender/input/data", 10,
+                std::bind(&SocketCAN_Sender::subscritionCallback, this, _1));
 
             RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Configuration completed successfully");
             return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
@@ -108,7 +109,7 @@ class SocketCAN_Sender : public rclcpp_lifecycle::LifecycleNode
             }
             socketID = SOCKET_CLOSED_PROGRAMATICALLY;
 
-            service.reset();
+            subscription.reset();
 
             RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Cleanup completed successfully");
 
@@ -127,7 +128,7 @@ class SocketCAN_Sender : public rclcpp_lifecycle::LifecycleNode
             }
             socketID = SOCKET_CLOSED_PROGRAMATICALLY;
 
-            service.reset();
+            subscription.reset();
 
             RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Shut down completed successfully");
 
@@ -144,63 +145,54 @@ class SocketCAN_Sender : public rclcpp_lifecycle::LifecycleNode
             }
             socketID = SOCKET_CLOSED_PROGRAMATICALLY;
 
-            service.reset();
+            subscription.reset();
 
             RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Destructor completed successfully");
         }
 
-        void serviceCallback (const std::shared_ptr<can_interface::srv::CanFrame::Request> request,
-                            std::shared_ptr<can_interface::srv::CanFrame::Response> response)
+        void subscritionCallback(const can_interface::msg::CanFrame & incomingData)
         {
             int err;
-            can_frame frame;
+            can_frame outgoingFrame;
 
-            if(request->frame.dlc > MAX_DLC_LENGTH)
+            if(incomingData.dlc > MAX_DLC_LENGTH)
             {
-                response->status = response->STATUS_ERROR_INVALID_ID;
-                    RCLCPP_WARN(rclcpp::get_logger("rclcpp"), 
-                                "Message was sent with an invalid ID. IDE: %d - ID: %X", 
-                                request->frame.is_extended_id, request->frame.can_id);
+                RCLCPP_WARN(rclcpp::get_logger("rclcpp"), 
+                            "Message was sent with an invalid ID. IDE: %d - ID: %X", 
+                            incomingData.is_extended_id, incomingData.can_id);
                 err = -1;
             }
 
-            if((request->frame.is_extended_id && (request->frame.can_id & CAN_ID_LARGER_THAN_29_BIT_MASK))
-                || (!request->frame.is_extended_id && (request->frame.can_id & CAN_ID_LARGER_THAN_11_BIT_MASK)))
+            if((incomingData.is_extended_id && (incomingData.can_id & CAN_ID_LARGER_THAN_29_BIT_MASK))
+                    || (!incomingData.is_extended_id && (incomingData.can_id & CAN_ID_LARGER_THAN_11_BIT_MASK)))
                 {
-                    response->status = response->STATUS_ERROR_DLC_OUT_OF_RANGE;
                     RCLCPP_WARN(rclcpp::get_logger("rclcpp"), 
-                                "Message was sent with an invalid DLC: %d", 
-                                request->frame.dlc);
+                                "Message was sent with an invalid ID: %d", 
+                                incomingData.can_id);
                     err = -1;
                 }
+            
+            if(err != 0) return;        //Any errors above should cancel the send
 
-            if(err != 0) return;      //We can list all warnings before exiting the function
+            outgoingFrame.can_id = incomingData.is_extended_id;
+            outgoingFrame.can_id = (outgoingFrame.can_id << 1) | incomingData.is_remote_request;
+            outgoingFrame.can_id = (outgoingFrame.can_id << 1) | incomingData.is_error;
+            outgoingFrame.can_id = (outgoingFrame.can_id << 29) | incomingData.can_id;
+            outgoingFrame.can_dlc = incomingData.dlc;
+            std::copy(std::begin(incomingData.data), std::end(incomingData.data), std::begin(outgoingFrame.data));
 
-            frame.can_id = request->frame.is_extended_id;
-            frame.can_id = (frame.can_id << 1) | request->frame.is_remote_request;
-            frame.can_id = (frame.can_id << 1) | request->frame.is_error;
-            frame.can_id = (frame.can_id << 29) | request->frame.can_id;
-            frame.can_dlc = request->frame.dlc;
-            std::copy(std::begin(request->frame.data), std::end(request->frame.data), std::begin(frame.data));
-
-            RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Sending %d bytes to ID: %d", frame.can_dlc, frame.can_id);
-
-            if((err = write(socketID, &frame, sizeof(struct can_frame))) != sizeof(struct can_frame))
+            RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Sending:\n\tID: %X\n\tLength: %d\n\t\n\tData: %X %X %X %X %X %X %X %X",
+                    outgoingFrame.can_id, outgoingFrame.can_dlc, outgoingFrame.data[0], outgoingFrame.data[1], outgoingFrame.data[2],
+                    outgoingFrame.data[3], outgoingFrame.data[4], outgoingFrame.data[5], outgoingFrame.data[6], outgoingFrame.data[7]);
+                
+            if((err = write(socketID, &outgoingFrame, sizeof(struct can_frame))) != sizeof(struct can_frame))
             {
                 if(err < 0)
-                {
-                    response->status = response->STATUS_ERROR_UNABLE_TO_SEND_DATA;
                     RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Socket Error: Unable to write data: %s", std::strerror(errno));
-                }
                 else
-                {
-                    response->status = response->STATUS_ERROR_PARTIAL_FRAME_SENT;
                     RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Socket Error: Could only write: %s bytes", std::strerror(errno));
-                }
-
                 return;
             }
-            response->status = response->STATUS_OK;
             RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Frame sent successfully");
         }
     
@@ -209,7 +201,7 @@ class SocketCAN_Sender : public rclcpp_lifecycle::LifecycleNode
         int socketID;
         struct ifreq ifr;
         struct sockaddr_can addr;
-        rclcpp::Service<can_interface::srv::CanFrame>::SharedPtr service;
+        rclcpp::Subscription<can_interface::msg::CanFrame>::SharedPtr subscription;
 };
 
 int main(int argc, char * argv[])
