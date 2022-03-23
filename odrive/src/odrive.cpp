@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <iostream>
 #include <memory>
+#include <thread>
 
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp/timer.hpp"
@@ -21,6 +22,7 @@ using std::placeholders::_1;
 using std::placeholders::_2;
 
 #define STATUS_PUBLISH_TIMER_INTERVAL 50
+#define CAN_SERVICE_WAIT_TIMEOUT 5
 
 class ODrive : public rclcpp_lifecycle::LifecycleNode
 {
@@ -175,7 +177,10 @@ class ODrive : public rclcpp_lifecycle::LifecycleNode
     private:
         void createInterfaces()
         {
-            canDataSenderClient = this->create_client<can_interface::srv::CanFrame>("odrive/output/can");
+            canClientCallbackGroup = this->create_callback_group(rclcpp::CallbackGroupType::Reentrant, true);
+
+            canDataSenderClient = this->create_client<can_interface::srv::CanFrame>("odrive/output/can",
+                            rmw_qos_profile_services_default, canClientCallbackGroup);
             axisStatusPublisher = this->create_publisher<odrive_interface::msg::AxisStatus>("odrive/output/status", 10);
             canDataSubscription = this->create_subscription<can_interface::msg::CanFrame>(
                 "odrive/input/can", 50, std::bind(&ODrive::canDataReceived, this, _1));
@@ -216,38 +221,45 @@ class ODrive : public rclcpp_lifecycle::LifecycleNode
         void startupAxis(const std::shared_ptr<std_srvs::srv::Trigger::Request>,
                             std::shared_ptr<std_srvs::srv::Trigger::Response> response)
         {
-            if(currentAxisState == ODRIVE_AXIS_STATE_Idle)
+            bool axisChangeSucceeded;
+            std::string axisChangeMessage;
+
+            switch(currentAxisStatus)
             {
-                switch(currentAxisStatus)
-                {
-                    case ODRIVE_AXIS_STATUS_NOT_READY:
-                        switch(calibrationType)
-                        {
-                            case ODRIVE_AXIS_CALIBRATION_None:
-                                sendAxisStateRequest(ODRIVE_AXIS_STATE_ClosedLoopControl);
-                                break;
-                            case ODRIVE_AXIS_CALIBRATION_EncoderIndex:
-                                sendAxisStateRequest(ODRIVE_AXIS_STATE_EncoderIndexSearch);
-                                break;
-                            case ODRIVE_AXIS_CALIBRATION_Full:
-                                sendAxisStateRequest(ODRIVE_AXIS_STATE_FullCalibrationSequence);
-                                break;
-                        }
-                        currentAxisStatus = ODRIVE_AXIS_STATUS_CALIBRATING;
+                case ODRIVE_AXIS_STATUS_NOT_READY:
+                    switch(calibrationType)
+                    {
+                        case ODRIVE_AXIS_CALIBRATION_None:
+                            std::tie(axisChangeSucceeded, axisChangeMessage) = sendAxisStateRequest(ODRIVE_AXIS_STATE_ClosedLoopControl);
+                            break;
+                        case ODRIVE_AXIS_CALIBRATION_EncoderIndex:
+                            std::tie(axisChangeSucceeded, axisChangeMessage) = sendAxisStateRequest(ODRIVE_AXIS_STATE_EncoderIndexSearch);
+                            break;
+                        case ODRIVE_AXIS_CALIBRATION_Full:
+                            std::tie(axisChangeSucceeded, axisChangeMessage) = sendAxisStateRequest(ODRIVE_AXIS_STATE_FullCalibrationSequence);
+                            break;
+                    }
+                    if(axisChangeSucceeded)
+                    {
                         RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Starting axis calibration");
-                        response->success = true;
-                        break;
-                    case ODRIVE_AXIS_STATUS_IDLE:
+                        currentAxisStatus = ODRIVE_AXIS_STATUS_CALIBRATING;
+                    }
+                    response->success = axisChangeSucceeded;
+                    response->message = axisChangeMessage;
+                    break;
+                case ODRIVE_AXIS_STATUS_IDLE:
+                    
+                    std::tie(axisChangeSucceeded, axisChangeMessage) = sendAxisStateRequest(ODRIVE_AXIS_STATE_ClosedLoopControl);
+                    if(axisChangeSucceeded)
                         RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Starting axis in closed loop");
-                        sendAxisStateRequest(ODRIVE_AXIS_STATE_ClosedLoopControl);
-                        response->success = true;
-                        break;
-                    default:
-                        response->success = false;
-                        response->message = "System status is not correct to start axis";
-                        RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "Not starting axis due to incorrect status: %d", currentAxisStatus);
-                        break;
-                }
+                    response->success = axisChangeSucceeded;
+                    response->message = axisChangeMessage;
+                    break;
+                default:
+                    response->success = false;
+                    response->message = "System status is not correct to start axis";
+                    RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "Not starting axis due to incorrect status: %d", currentAxisStatus);
+                    break;
             }
         }
 
@@ -255,6 +267,7 @@ class ODrive : public rclcpp_lifecycle::LifecycleNode
                             std::shared_ptr<std_srvs::srv::Trigger::Response> response)
         {
             sendAxisStateRequest(ODRIVE_AXIS_STATE_Idle);
+            
             response->success = true;
             RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Shutting down axis");
         }
@@ -295,12 +308,32 @@ class ODrive : public rclcpp_lifecycle::LifecycleNode
             memcpy(canRequest->frame.data.data(), &request->input_velocity, sizeof(request->input_velocity));
             memcpy(canRequest->frame.data.data() + 4, &request->torque_feedforward, sizeof(request->torque_feedforward));
 
-            response->status = response->STATUS_OK;
+            std::shared_future<std::shared_ptr<can_interface::srv::CanFrame::Response>>
+                future = canDataSenderClient->async_send_request(canRequest);
 
-            canDataSenderClient->async_send_request(canRequest);
+            if(future.wait_for(std::chrono::milliseconds(CAN_SERVICE_WAIT_TIMEOUT)) == std::future_status::ready)
+            {
+                if(future.get().get()->status == future.get().get()->STATUS_OK)
+                {
+                    response->status = response->STATUS_OK;
+                    return;
+                }
+                else
+                {
+                    response->status = response->STATUS_ERROR_UPSTREAM_SERVICE_RETURNED_ERROR;
+                    RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "Sending input velocity message returned code: %d", future.get().get()->status);
+                    return;
+                }
+            }
+            else
+            {
+                response->status = response->STATUS_ERROR_UPSTREAM_SERVICE_RETURNED_ERROR;
+                RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "Sending input velocity timed out");
+                return;
+            }
         }
 
-        void sendClearErrorRequest()
+        bool sendClearErrorRequest()
         {
             auto canRequest = std::make_shared<can_interface::srv::CanFrame::Request>();
 
@@ -308,21 +341,55 @@ class ODrive : public rclcpp_lifecycle::LifecycleNode
             canRequest->frame.is_error = canRequest->frame.is_extended_id = canRequest->frame.is_remote_request = 0;
             canRequest->frame.dlc = 8;
 
-            canDataSenderClient->async_send_request(canRequest);
+            std::shared_future<std::shared_ptr<can_interface::srv::CanFrame::Response>>
+                future = canDataSenderClient->async_send_request(canRequest);
+
+            if(future.wait_for(std::chrono::milliseconds(CAN_SERVICE_WAIT_TIMEOUT)) == std::future_status::ready)
+            {
+                if(future.get().get()->status == future.get().get()->STATUS_OK)
+                    return true;
+                else
+                {
+                    RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "Sending clear error message returned code: %d", future.get().get()->status);
+                    return false;
+                }
+            }
+            else
+            {
+                RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "Sending clear error message timed out");
+                return false;
+            }
         }
 
-        void sendAxisStateRequest(odrive_axis_states new_state)
+        std::tuple<bool, std::string> sendAxisStateRequest(odrive_axis_states new_state)
         {
             auto canRequest = std::make_shared<can_interface::srv::CanFrame::Request>();
+            axisStateChangeStatus = 0;
 
             canRequest->frame.can_id = (axisNumber << 5) | ODRIVE_COMMAND_SetAxisRequestedState;
             canRequest->frame.is_error = canRequest->frame.is_extended_id = canRequest->frame.is_remote_request = 0;
             canRequest->frame.dlc = 8;
             memcpy(canRequest->frame.data.data(), &new_state, sizeof(new_state));
 
-            canDataSenderClient->async_send_request(canRequest);
+            RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Sending new state request");
 
-            //return rclcpp::spin_until_future_complete(this->get_node_base_interface(), result) == rclcpp::FutureReturnCode::SUCCESS;
+            auto future = canDataSenderClient->async_send_request(canRequest);
+
+            if(future.wait_for(std::chrono::milliseconds(CAN_SERVICE_WAIT_TIMEOUT)) == std::future_status::ready)
+            {
+                if(future.get().get()->status == future.get().get()->STATUS_OK)
+                    return std::make_tuple(true, "");
+                else
+                {
+                    RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "CAN service return status code: %d", future.get().get()->status);
+                    return std::make_tuple(false, "Upstream service returned an error");
+                }
+            }
+            else
+            {
+                RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "CAN service did not respond");
+                return std::make_tuple(false, "Upstream service timed out");
+            }
         }
 
         void canDataReceived(const can_interface::msg::CanFrame & message)
@@ -413,6 +480,8 @@ class ODrive : public rclcpp_lifecycle::LifecycleNode
 
         rclcpp::TimerBase::SharedPtr statusPublishTimer;
 
+        rclcpp::CallbackGroup::SharedPtr canClientCallbackGroup;
+
         int32_t axisNumber;
         int32_t calibrationType;
         mutable int32_t currentAxisError;
@@ -420,6 +489,8 @@ class ODrive : public rclcpp_lifecycle::LifecycleNode
         mutable odrive_axis_status currentAxisStatus;
         mutable float currentPosition;
         mutable float currentVelocity;
+
+        int axisStateChangeStatus;
 
 };
 
