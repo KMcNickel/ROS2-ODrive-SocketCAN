@@ -31,13 +31,13 @@ class SocketCAN_Sender : public rclcpp_lifecycle::LifecycleNode
         SocketCAN_Sender()
         : LifecycleNode("sender")
         {
-            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Node created");
+            RCLCPP_INFO(rclcpp::get_logger("Constructor"), "Node created");
         }
 
         rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
         on_configure(const rclcpp_lifecycle::State &)
         {
-            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Configuring...");
+            RCLCPP_INFO(rclcpp::get_logger("on_configure"), "Configuring...");
 
             this->declare_parameter<std::string>("interface_name", "can0");
 
@@ -45,34 +45,34 @@ class SocketCAN_Sender : public rclcpp_lifecycle::LifecycleNode
 
             if ((socketID = socket(PF_CAN, SOCK_RAW, CAN_RAW)) < 0)
             {
-                RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Socket Error: Unable to create socket: %d", socketID);
+                RCLCPP_ERROR(rclcpp::get_logger("on_configure"), "Socket Error: Unable to create socket: %d", socketID);
                 return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::ERROR;
             }
 
             subscription = this->create_subscription<can_interface::msg::CanFrame>("socketcan/sender/input/data", 10,
                 std::bind(&SocketCAN_Sender::subscriptionCallback, this, _1));
 
-            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Configuration completed successfully");
+            RCLCPP_INFO(rclcpp::get_logger("on_configure"), "Configuration completed successfully");
             return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
         }
 
         rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
         on_activate(const rclcpp_lifecycle::State &)
         {
-            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Activating...");
+            RCLCPP_INFO(rclcpp::get_logger("on_activate"), "Activating...");
 
-            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Attempting to connect on: %s", interfaceName.c_str());
+            RCLCPP_INFO(rclcpp::get_logger("on_activate"), "Attempting to connect on: %s", interfaceName.c_str());
             
             strcpy(ifr.ifr_name, interfaceName.c_str());
             
             if(ioctl(socketID, SIOCGIFINDEX, &ifr) < 0)
             {
-                RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Socket Error: Unable to find interface: %s", std::strerror(errno));
+                RCLCPP_ERROR(rclcpp::get_logger("on_activate"), "Socket Error: Unable to find interface: %s", std::strerror(errno));
                 return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::FAILURE;
             }
 
             if(!(ifr.ifr_flags & IFF_UP))
-                RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "Selected interface '%s' is not UP", interfaceName.c_str());
+                RCLCPP_WARN(rclcpp::get_logger("on_activate"), "Selected interface '%s' is not UP", interfaceName.c_str());
 
             memset(&addr, 0, sizeof(addr));
             addr.can_family = AF_CAN;
@@ -80,11 +80,11 @@ class SocketCAN_Sender : public rclcpp_lifecycle::LifecycleNode
 
             if(bind(socketID, (struct sockaddr *)&addr, sizeof(addr)) < 0)
             {
-                RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Socket Error: Unable to bind to socket: %s", std::strerror(errno));
+                RCLCPP_ERROR(rclcpp::get_logger("on_activate"), "Socket Error: Unable to bind to socket: %s", std::strerror(errno));
                 return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::FAILURE;
             }
 
-            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Activation completed successfully");
+            RCLCPP_INFO(rclcpp::get_logger("on_activate"), "Activation completed successfully");
 
             return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
         }
@@ -92,26 +92,26 @@ class SocketCAN_Sender : public rclcpp_lifecycle::LifecycleNode
         rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
         on_deactivate(const rclcpp_lifecycle::State &)
         {
-            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Deactivating...");
-            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Deactivation completed successfully");
+            RCLCPP_INFO(rclcpp::get_logger("on_deactivate"), "Deactivating...");
+            RCLCPP_INFO(rclcpp::get_logger("on_deactivate"), "Deactivation completed successfully");
             return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
         }
 
         rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
         on_cleanup(const rclcpp_lifecycle::State &)
         {
-            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Cleaning Up...");
+            RCLCPP_INFO(rclcpp::get_logger("on_cleanup"), "Cleaning Up...");
 
             if(socketID != SOCKET_CLOSED_PROGRAMATICALLY && close(socketID) < 0)
             {
-                RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Socket Error: Unable to close socket: %s", std::strerror(errno));
+                RCLCPP_ERROR(rclcpp::get_logger("on_cleanup"), "Socket Error: Unable to close socket: %s", std::strerror(errno));
                 return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::FAILURE;
             }
             socketID = SOCKET_CLOSED_PROGRAMATICALLY;
 
             subscription.reset();
 
-            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Cleanup completed successfully");
+            RCLCPP_INFO(rclcpp::get_logger("on_cleanup"), "Cleanup completed successfully");
 
             return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
         }
@@ -119,35 +119,35 @@ class SocketCAN_Sender : public rclcpp_lifecycle::LifecycleNode
         rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
         on_shutdown(const rclcpp_lifecycle::State &)
         {
-            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Shutting Down...");
+            RCLCPP_INFO(rclcpp::get_logger("on_shutdown"), "Shutting Down...");
 
             if(socketID != SOCKET_CLOSED_PROGRAMATICALLY && close(socketID) < 0)
             {
-                RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Socket Error: Unable to close socket: %s", std::strerror(errno));
+                RCLCPP_ERROR(rclcpp::get_logger("on_shutdown"), "Socket Error: Unable to close socket: %s", std::strerror(errno));
                 return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::FAILURE;
             }
             socketID = SOCKET_CLOSED_PROGRAMATICALLY;
 
             subscription.reset();
 
-            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Shut down completed successfully");
+            RCLCPP_INFO(rclcpp::get_logger("on_shutdown"), "Shut down completed successfully");
 
             return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
         }
 
         ~SocketCAN_Sender()
         {
-            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Destructing...");
+            RCLCPP_INFO(rclcpp::get_logger("Destructor"), "Shutting down...");
 
             if(socketID != SOCKET_CLOSED_PROGRAMATICALLY && close(socketID) < 0)
             {
-                RCLCPP_FATAL(rclcpp::get_logger("rclcpp"), "Socket Error: Unable to close socket: %s", std::strerror(errno));
+                RCLCPP_FATAL(rclcpp::get_logger("Destructor"), "Socket Error: Unable to close socket: %s", std::strerror(errno));
             }
             socketID = SOCKET_CLOSED_PROGRAMATICALLY;
 
             subscription.reset();
 
-            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Destructor completed successfully");
+            RCLCPP_INFO(rclcpp::get_logger("Destructor"), "Shut down completed successfully");
         }
 
         void subscriptionCallback(const can_interface::msg::CanFrame & incomingData)
@@ -155,17 +155,17 @@ class SocketCAN_Sender : public rclcpp_lifecycle::LifecycleNode
             int err = 0;
             can_frame outgoingFrame;
 
-            RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Data incoming");
+            RCLCPP_DEBUG(rclcpp::get_logger("subscriptionCallback"), "Data incoming");
 
             if(this->get_current_state().id() != 3)     //3 is the "active" lifecycle state
             {
-                RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Ignoring data while in current state");
+                RCLCPP_DEBUG(rclcpp::get_logger("subscriptionCallback"), "Ignoring data while in current state");
                 return;
             }
 
             if(incomingData.dlc > MAX_DLC_LENGTH)
             {
-                RCLCPP_WARN(rclcpp::get_logger("rclcpp"), 
+                RCLCPP_WARN(rclcpp::get_logger("subscriptionCallback"), 
                             "Message was sent with an invalid ID. IDE: %d - ID: %X", 
                             incomingData.is_extended_id, incomingData.can_id);
                 err = -1;
@@ -174,7 +174,7 @@ class SocketCAN_Sender : public rclcpp_lifecycle::LifecycleNode
             if((incomingData.is_extended_id && (incomingData.can_id & CAN_ID_LARGER_THAN_29_BIT_MASK))
                     || (!incomingData.is_extended_id && (incomingData.can_id & CAN_ID_LARGER_THAN_11_BIT_MASK)))
             {
-                RCLCPP_WARN(rclcpp::get_logger("rclcpp"), 
+                RCLCPP_WARN(rclcpp::get_logger("subscriptionCallback"), 
                             "Message was sent with an invalid ID: %d", 
                             incomingData.can_id);
                 err += -2;
@@ -182,7 +182,7 @@ class SocketCAN_Sender : public rclcpp_lifecycle::LifecycleNode
             
             if(err != 0)
             {
-                RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "Message will not be sent");
+                RCLCPP_WARN(rclcpp::get_logger("subscriptionCallback"), "Message will not be sent");
                 return;
             }
 
@@ -193,19 +193,19 @@ class SocketCAN_Sender : public rclcpp_lifecycle::LifecycleNode
             outgoingFrame.can_dlc = incomingData.dlc;
             std::copy(std::begin(incomingData.data), std::end(incomingData.data), std::begin(outgoingFrame.data));
 
-            RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Sending:\n\tID: 0x%X\n\tLength: %d\n\tData: 0x%X 0x%X 0x%X 0x%X 0x%X 0x%X 0x%X 0x%X",
+            RCLCPP_DEBUG(rclcpp::get_logger("subscriptionCallback"), "Sending:\n\tID: 0x%X\n\tLength: %d\n\tData: 0x%X 0x%X 0x%X 0x%X 0x%X 0x%X 0x%X 0x%X",
                     outgoingFrame.can_id, outgoingFrame.can_dlc, outgoingFrame.data[0], outgoingFrame.data[1], outgoingFrame.data[2],
                     outgoingFrame.data[3], outgoingFrame.data[4], outgoingFrame.data[5], outgoingFrame.data[6], outgoingFrame.data[7]);
                 
             if((err = write(socketID, &outgoingFrame, sizeof(struct can_frame))) != sizeof(struct can_frame))
             {
                 if(err < 0)
-                    RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Socket Error: Unable to write data: %s", std::strerror(errno));
+                    RCLCPP_ERROR(rclcpp::get_logger("subscriptionCallback"), "Socket Error: Unable to write data: %s", std::strerror(errno));
                 else
-                    RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Socket Error: Could only write: %d bytes", err);
+                    RCLCPP_ERROR(rclcpp::get_logger("subscriptionCallback"), "Socket Error: Could only write: %d bytes", err);
                 return;
             }
-            RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Frame sent successfully");
+            RCLCPP_DEBUG(rclcpp::get_logger("subscriptionCallback"), "Frame sent successfully");
         }
     
     private:
