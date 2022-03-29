@@ -15,7 +15,6 @@ def generate_launch_description():
             output="screen",
             emulate_tty=True,
             parameters=[
-                {"axis_number": axis_number},
                 {"axis_gear_ratio": 2.5},
             ],
             remappings=[

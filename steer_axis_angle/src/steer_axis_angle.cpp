@@ -31,13 +31,11 @@ class SteerAxisAngle : public rclcpp_lifecycle::LifecycleNode
         {
             RCLCPP_INFO(rclcpp::get_logger("on_configure"), "Configuring...");
 
-            this->declare_parameter<int32_t>("axis_number", 0);
             this->declare_parameter<double>("axis_gear_ratio", 1.0);
 
-            this->get_parameter<int32_t>("axis_number", axisNumber);
             this->get_parameter<double>("axis_gear_ratio", axisGearRatio);
 
-            RCLCPP_INFO(rclcpp::get_logger("on_configure"), "Using Axis %d with a gear ratio of %f:1", axisNumber, axisGearRatio);
+            RCLCPP_INFO(rclcpp::get_logger("on_configure"), "Using a gear ratio of %f:1", axisGearRatio);
 
             odriveAxisStatusSubscriber = this->create_subscription<odrive_interface::msg::AxisStatus>(
               "angle/input/odrive/status", 10, std::bind(&SteerAxisAngle::processOdriveData, this, _1));
@@ -126,9 +124,9 @@ class SteerAxisAngle : public rclcpp_lifecycle::LifecycleNode
 
           lastPosition = status.current_position;
 
-          angle = ((lastPosition - currentOffset) / axisGearRatio) * 360.0;
+          angle = fmod((lastPosition - currentOffset), axisGearRatio) * (360.0 / axisGearRatio);
 
-          RCLCPP_DEBUG(rclcpp::get_logger("processODriveData"), "Current axis %d steer angle: %f degrees", axisNumber, angle);
+          RCLCPP_DEBUG(rclcpp::get_logger("processODriveData"), "Current steer angle: %f degrees", angle);
 
           message.data = angle;
 
@@ -158,7 +156,6 @@ class SteerAxisAngle : public rclcpp_lifecycle::LifecycleNode
 
         rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr zeroAxisService;
 
-        int32_t axisNumber;
         mutable double axisGearRatio;
 
         double currentOffset;
