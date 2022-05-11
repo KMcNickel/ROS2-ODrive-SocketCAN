@@ -15,7 +15,8 @@ if(BUILD_TESTING)
 endif()
 
 rosidl_generate_interfaces(${PROJECT_NAME}
-  "msg/Heartbeat.msg"
+  "msg/AxisStatus.msg"
+  "msg/InputVelocity.msg"
 )
 
 ament_package()
