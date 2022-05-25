@@ -1,37 +1,55 @@
 from launch import LaunchDescription
 from launch_ros.actions import Node
-
-device_name = "agv0"
-can_interface = "can0"
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration
 
 def generate_launch_description():
+    deviceName = LaunchConfiguration('robot_name')
+    canbusInterfaceName = LaunchConfiguration('canbus_interface_name')
+
+    deviceNameLaunchArg = DeclareLaunchArgument(
+        'device_name',
+        default_value = 'agv0'
+    )
+
+    canbusInterfaceNameLaunchArg = DeclareLaunchArgument(
+        'canbus_interface_name',
+        default_value = 'can0'
+    )
+
+    canReceiverNode = Node(
+        package="socketcan",
+        executable="receiver",
+        namespace=deviceName + "/" + canbusInterfaceName,
+        name="receiver",
+        output="screen",
+        emulate_tty=True,
+        parameters=[
+            {"interface_name": canbusInterfaceName}
+        ],
+        remappings=[
+            ("socketcan/receiver/output/data", "output/data")
+        ]
+    )
+
+    canSenderNode = Node(
+        package="socketcan",
+        executable="sender",
+        namespace=deviceName + "/" + canbusInterfaceName,
+        name="sender",
+        output="screen",
+        emulate_tty=True,
+        parameters=[
+            {"interface_name": canbusInterfaceName}
+        ],
+        remappings=[
+            ("socketcan/sender/input/data", "input/data")
+        ]
+    )
+
     return LaunchDescription([
-        Node(
-            package="socketcan",
-            executable="receiver",
-            namespace=device_name + "/" + can_interface,
-            name="receiver",
-            output="screen",
-            emulate_tty=True,
-            parameters=[
-                {"interface_name": can_interface}
-            ],
-            remappings=[
-                ("socketcan/receiver/output/data", "output/data")
-            ]
-        ),
-        Node(
-            package="socketcan",
-            executable="sender",
-            namespace=device_name + "/" + can_interface,
-            name="sender",
-            output="screen",
-            emulate_tty=True,
-            parameters=[
-                {"interface_name": can_interface}
-            ],
-            remappings=[
-                ("socketcan/sender/input/data", "input/data")
-            ]
-        )
+        deviceNameLaunchArg,
+        canbusInterfaceNameLaunchArg,
+        canReceiverNode,
+        canSenderNode
     ])
