@@ -4,7 +4,7 @@ from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
 
 def generate_launch_description():
-    deviceName = LaunchConfiguration('robot_name')
+    deviceName = LaunchConfiguration('device_name')
     canbusInterfaceName = LaunchConfiguration('canbus_interface_name')
 
     deviceNameLaunchArg = DeclareLaunchArgument(
@@ -20,7 +20,7 @@ def generate_launch_description():
     canReceiverNode = Node(
         package="socketcan",
         executable="receiver",
-        namespace=deviceName + "/" + canbusInterfaceName,
+        namespace = [deviceName, "/", canbusInterfaceName],
         name="receiver",
         output="screen",
         emulate_tty=True,
@@ -35,7 +35,7 @@ def generate_launch_description():
     canSenderNode = Node(
         package="socketcan",
         executable="sender",
-        namespace=deviceName + "/" + canbusInterfaceName,
+        namespace = [deviceName, "/", canbusInterfaceName],
         name="sender",
         output="screen",
         emulate_tty=True,

@@ -4,9 +4,10 @@ from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
 
 def generate_launch_description():
-    deviceName = LaunchConfiguration('robot_name')
+    deviceName = LaunchConfiguration('device_name')
     canbusInterfaceName = LaunchConfiguration('canbus_interface_name')
     axisNumber = LaunchConfiguration('axis_number')
+    calibrationType = LaunchConfiguration('calibration_type')
 
     deviceNameLaunchArg = DeclareLaunchArgument(
         'device_name',
@@ -20,24 +21,30 @@ def generate_launch_description():
 
     axisNumberLaunchArg = DeclareLaunchArgument(
         'axis_number',
-        default_value = 0
+        default_value = '0'
+    )
+
+    axisNumberLaunchArg = DeclareLaunchArgument(
+        'calibration_type',
+        default_value = '0',
+        description = "0 = None, 1 = Encoder Index Search, 2 = Full"
     )
 
     odriveNode = Node(
         package="odrive",
         executable="odrive",
-        namespace=deviceName + "/axis" + str(axisNumber),
+        namespace = [deviceName, "/axis", axisNumber],
         name="odrive",
         output="screen",
         emulate_tty=True,
         parameters=[
             {"axis_number": axisNumber},
-            {"calibration_type": 1},
+            {"calibration_type": calibrationType},
             {"publish_debug_messages": True}
         ],
         remappings=[
-            ("odrive/input/can", "/" + deviceName + "/" + canbusInterfaceName + "/output/data"),
-            ("odrive/output/can", "/" + deviceName + "/" + canbusInterfaceName + "/input/data"),
+            ("odrive/input/can", ["/", deviceName, "/", canbusInterfaceName, "/output/data"]),
+            ("odrive/output/can", ["/", deviceName, "/", canbusInterfaceName, "/input/data"]),
             ("odrive/output/status", "output/status"),
             ("odrive/input/velocity", "input/velocity"),
             ("odrive/input/start", "input/start"),
