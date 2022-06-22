@@ -480,7 +480,7 @@ class ODrive : public rclcpp_lifecycle::LifecycleNode
                 RCLCPP_DEBUG(rclcpp::get_logger("setInputVelocity"), "Unable to send input velocity message");
         }
 
-        bool sendSetInputVelocity(float velocity, int16_t torque_ff)
+        bool sendSetInputVelocity(float velocity, float torque_ff)
         {
             if(currentSystemErrors.ErrorsExist())
             {
@@ -497,7 +497,7 @@ class ODrive : public rclcpp_lifecycle::LifecycleNode
             lastInputVelocity = velocity;
             currentSystemErrors.IncomingVelocityTimeoutError = false;
 
-            RCLCPP_DEBUG(rclcpp::get_logger("sendSetInputVelocity"), "Sending new input velocity request:\n\tVelocity: %f\n\tTorque_FF: %d",
+            RCLCPP_DEBUG(rclcpp::get_logger("sendSetInputVelocity"), "Sending new input velocity request:\n\tVelocity: %f\n\tTorque_FF: %f",
                 velocity, torque_ff);
 
             int8_t data[8];
